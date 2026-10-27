@@ -233,7 +233,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   </div>
 
   <h2>Die Nacht im Verlauf</h2>
-  <p class="small muted" style="margin-top:-4px">Bewölkung in Prozent je Wettermodell, Seeing nach 7Timer (1 = ruhig, 8 = unruhig). Tippe auf eine Stunde, um sie auszuwählen.</p>
+  <p class="small muted" style="margin-top:-4px">Bewölkung in Prozent je Wettermodell. Seeing und Transparenz auf einer Skala von 1 (sehr gut) bis 8 (schlecht), berechnet aus den Höhendaten, 7Timer als Vergleich. Tippe auf eine Stunde, um sie auszuwählen.</p>
   <div class="tlwrap"><div class="tl" id="tl"></div></div>
 
   <h2>Wetter im Detail</h2>
@@ -249,7 +249,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   <div class="links" id="links"></div>
 
   <footer>
-    Wetterdaten: Open-Meteo (Modelle DWD ICON, ECMWF IFS, NOAA GFS), Aerosol-Daten: Copernicus CAMS über Open-Meteo, Astro-Vorhersage: 7Timer. Objektkatalog: Auswahl aus <a href="https://github.com/mattiaverga/OpenNGC" style="color:inherit">OpenNGC</a> von Mattia Verga (CC BY-SA 4.0), ergänzt um einige Sharpless-Objekte. Positionen von Sonne, Mond und Objekten werden im Gerät berechnet (Genauigkeit etwa ein Grad).
+    Wetterdaten: Open-Meteo (Modelle DWD ICON, ECMWF IFS, NOAA GFS), Aerosol-Daten: Copernicus CAMS über Open-Meteo, Seeing und Transparenz werden aus Höhenwinden, Windscherung, Luftfeuchte, hohen Wolken und Aerosolen geschätzt; 7Timer dient als Vergleich. Objektkatalog: Auswahl aus <a href="https://github.com/mattiaverga/OpenNGC" style="color:inherit">OpenNGC</a> von Mattia Verga (CC BY-SA 4.0), ergänzt um einige Sharpless-Objekte. Positionen von Sonne, Mond und Objekten werden im Gerät berechnet (Genauigkeit etwa ein Grad).
   </footer>
 </main>
 
@@ -948,7 +948,7 @@ const S = Object.assign({
 }, (()=>{ try{ return JSON.parse(localStorage.getItem(KEY))||{}; }catch(e){ return {}; } })());
 const save = () => { try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} };
 let T = Date.now();
-let WX = null, T7 = null, AQ = null, wxState = {loading:false, err:null, err7:null, errAq:null, at:null};
+let WX = null, T7 = null, AQ = null, PL = null, wxState = {loading:false, err:null, err7:null, errAq:null, errPl:null, at:null};
 let openId = null, showAll = false;
 const loc = () => S.locs[S.cur] || S.locs[0];
 
@@ -960,7 +960,7 @@ async function getJSON(url){
 }
 async function loadWeather(){
   const L=loc(); if(!L) return;
-  wxState={loading:true,err:null,err7:null,errAq:null,at:null}; render();
+  wxState={loading:true,err:null,err7:null,errAq:null,errPl:null,at:null}; render();
   const lat=L.lat.toFixed(4), lon=L.lon.toFixed(4);
   const om=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=${VARS.join(",")}&timeformat=unixtime&timezone=GMT&forecast_days=7&wind_speed_unit=kmh`;
   const p1=(async()=>{
@@ -974,7 +974,7 @@ async function loadWeather(){
   })();
   const p2=(async()=>{
     try{ T7=parse7(await getJSON(`https://www.7timer.info/bin/astro.php?lon=${lon}&lat=${lat}&ac=0&unit=metric&output=json&tzshift=0`)); }
-    catch(e){ T7=null; wxState.err7="7Timer antwortet gerade nicht. Seeing und Transparenz fehlen deshalb."; }
+    catch(e){ T7=null; wxState.err7="7Timer antwortet gerade nicht, Seeing und Transparenz kommen deshalb nur aus der eigenen Berechnung."; }
   })();
   const p3=(async()=>{
     try{
@@ -982,7 +982,15 @@ async function loadWeather(){
       AQ={times:j.hourly.time, aod:j.hourly.aerosol_optical_depth, dust:j.hourly.dust};
     }catch(e){ AQ=null; wxState.errAq="Aerosol-Daten fehlen."; }
   })();
-  await Promise.all([p1,p2,p3]);
+  const p4=(async()=>{
+    const plUrl=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=${PLVARS.join(",")}&timeformat=unixtime&timezone=GMT&forecast_days=7&wind_speed_unit=ms`;
+    try{ PL=parsePL(await getJSON(plUrl+"&models="+PLMODELS.map(m=>m.key).join(",")),true); }
+    catch(e){
+      try{ PL=parsePL(await getJSON(plUrl),false); }
+      catch(e2){ PL=null; wxState.errPl="Höhendaten fehlen, das eigene Seeing kann nicht berechnet werden."; }
+    }
+  })();
+  await Promise.all([p1,p2,p3,p4]);
   wxState.loading=false; wxState.at=Date.now(); render();
 }
 function parseOM(j, multi){
@@ -1019,6 +1027,74 @@ function t7At(t){
   for(const r of T7){ const d=Math.abs(r.t-t); if(d<bd){bd=d;best=r;} }
   return bd<=2*3600000?best:null;
 }
+/* ---------- Eigenes Seeing und eigene Transparenz aus Open-Meteo-Höhendaten ----------
+   Faustformel nach dem Vorbild der Astro-Vorhersagen: Luftunruhe entsteht vor allem durch
+   Windscherung zwischen den Schichten und durch den Jetstream; Bodenwind kommt dazu.
+   Ergebnis auf der 7Timer-Skala 1 (sehr ruhig) bis 8 (sehr unruhig). */
+const PL_LEVELS=[850,700,500,300,250,200];
+const PLVARS=[...PL_LEVELS.flatMap(l=>[`wind_speed_${l}hPa`,`wind_direction_${l}hPa`]),"relative_humidity_700hPa","relative_humidity_500hPa"];
+const PLMODELS=[{key:"icon_seamless",label:"DWD ICON"},{key:"ecmwf_ifs025",label:"ECMWF"}];
+function parsePL(j, multi){
+  const h=j.hourly, out={times:h.time, models:{}};
+  const list = multi ? PLMODELS : [{key:"best",label:"Open-Meteo"}];
+  for(const m of list){
+    const o={}; let any=false;
+    for(const v of PLVARS){ o[v]= multi ? (h[`${v}_${m.key}`]||null) : (h[v]||null); if(o[v]&&o[v].some(x=>x!==null)) any=true; }
+    if(any) out.models[m.key]={label:m.label,d:o};
+  }
+  return out;
+}
+function seeingFrom(d, i, gust){
+  const vec=l=>{ const s=d[`wind_speed_${l}hPa`], r=d[`wind_direction_${l}hPa`];
+    if(!s||!r||s[i]===null||r[i]===null) return null;
+    const a=r[i]*D; return [s[i]*Math.sin(a), s[i]*Math.cos(a), s[i]]; };
+  const v=PL_LEVELS.map(vec);
+  if(v.some(x=>x===null)) return null;
+  let shear=0; for(let k=1;k<v.length;k++) shear+=Math.hypot(v[k][0]-v[k-1][0], v[k][1]-v[k-1][1]);
+  const jet=Math.max(v[3][2],v[4][2],v[5][2])*3.6;           // km/h
+  const jetP = jet<50?0 : jet<100?(jet-50)/50*2 : jet<150?2+(jet-100)/50*1.5 : 4;
+  const shearP = shear<15?0 : shear<40?(shear-15)/25*2.5 : 3;
+  const sfcP = gust===null||gust===undefined?0 : gust>45?1 : gust>30?0.5 : 0;
+  return {val:clamp(Math.round(1+jetP+shearP+sfcP),1,8), jet, shear};
+}
+function plIdx(t){ return PL ? idxNear(PL.times,t,1) : -1; }
+function gustAt(t){
+  if(!WX) return null; const i=idxNear(WX.times,t,1); if(i<0) return null;
+  const v=Object.values(WX.models).map(m=>m.d.wind_gusts_10m?m.d.wind_gusts_10m[i]:null).filter(x=>x!==null&&x!==undefined);
+  return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;
+}
+function seeingAt(t){
+  const i=plIdx(t); if(i<0) return null;
+  const g=gustAt(t), per=[];
+  for(const m of Object.values(PL.models)){ const s=seeingFrom(m.d,i,g); if(s) per.push({label:m.label,...s}); }
+  if(!per.length) return null;
+  const avg=k=>per.reduce((a,b)=>a+b[k],0)/per.length;
+  return {val:clamp(Math.round(avg("val")),1,8), jet:avg("jet"), shear:avg("shear"), per};
+}
+function transpAt(t){
+  let pts=0, have=false;
+  const aq=aqAt(t);
+  if(aq&&aq.aod!==null){ have=true; const a=aq.aod; pts += a<0.05?0 : a<0.1?0.5 : a<0.2?1.5 : a<0.3?2.5 : a<0.5?3.5 : 4.5; }
+  else pts+=1.5;
+  const i=plIdx(t);
+  if(i>=0){
+    const rh=[]; for(const m of Object.values(PL.models)) for(const l of [700,500]){ const a=m.d[`relative_humidity_${l}hPa`]; if(a&&a[i]!==null) rh.push(a[i]); }
+    if(rh.length){ have=true; const r=rh.reduce((a,b)=>a+b,0)/rh.length; pts += r>70?1.5 : r>50?0.7 : 0; }
+  }
+  if(WX){
+    const j=idxNear(WX.times,t,1);
+    if(j>=0){
+      const hc=Object.values(WX.models).map(m=>m.d.cloud_cover_high?m.d.cloud_cover_high[j]:null).filter(x=>x!==null&&x!==undefined);
+      const rh=Object.values(WX.models).map(m=>m.d.relative_humidity_2m?m.d.relative_humidity_2m[j]:null).filter(x=>x!==null&&x!==undefined);
+      if(hc.length){ have=true; pts += hc.reduce((a,b)=>a+b,0)/hc.length/100*2.5; }
+      if(rh.length && rh.reduce((a,b)=>a+b,0)/rh.length>90) pts+=0.5;
+    }
+  }
+  return have ? clamp(Math.round(1+pts),1,8) : null;
+}
+const seeCol = v => v<=3?"good":v<=5?"warn":"bad";
+const transpTxt = v => v<=2?"sehr klar":v<=4?"gut":v<=6?"mäßig":"dunstig";
+
 function aqAt(t){
   if(!AQ) return null; const i=idxNear(AQ.times,t,1);
   return i<0?null:{aod:AQ.aod[i], dust:AQ.dust?AQ.dust[i]:null};
@@ -1125,7 +1201,9 @@ function renderVerdict(E){
   const moonImpact = E.mo.alt>0 ? E.ph.k*(E.mo.alt>15?1:0.6) : 0;
   const clearF = cAvg===null ? 0.7 : Math.pow(1-cAvg/100,1.2);
   let score = Math.round(100*darkF*clearF*(1-0.35*moonImpact));
-  if(t7&&t7.transp) score=Math.round(score*(1-0.04*Math.max(0,t7.transp-3)));
+  const seeN=seeingAt(T), trN=transpAt(T);
+  const trUse = trN ?? (t7&&t7.transp) ?? null;
+  if(trUse) score=Math.round(score*(1-0.04*Math.max(0,trUse-3)));
   const dw=DIRWORD[S.dir];
   let head;
   if(darkF===0) head = E.sa>0 ? "Es ist noch Tag" : "Noch zu hell für Deep-Sky";
@@ -1163,15 +1241,16 @@ function renderVerdict(E){
       const spread=f.temperature_2m-f.dew_point_2m;
       m.push(["Tau",spread<2?"Taugefahr hoch":spread<4?"Tau möglich":"kaum Taugefahr",`${nf(f.temperature_2m,1)} °C, Taupunkt ${nf(f.dew_point_2m,1)} °C`, spread<2?"bad":spread<4?"warn":"good"]);
     }
-    const jets=Object.values(w).map(x=>x.v.wind_speed_250hPa).filter(x=>x!==null&&x!==undefined);
-    if(jets.length){
-      const j=jets.reduce((a,b)=>a+b,0)/jets.length;
-      m.push(["Höhenwind",`${nf(j)} km/h`,`Jetstream in 10 km Höhe, ${j<70?"ruhige Luft":j<120?"etwas Luftunruhe":"unruhige Luft"}`, j<70?"good":j<120?"warn":"bad"]);
-    }
     if(f.wind_speed_10m!==null) m.push(["Wind am Boden",`${nf(f.wind_speed_10m)} km/h`,`Böen bis ${nf(f.wind_gusts_10m??0)} km/h`, f.wind_gusts_10m<25?"good":f.wind_gusts_10m<40?"warn":"bad"]);
   }
-  if(t7&&t7.seeing) m.push(["Seeing (7Timer)",`${t7.seeing} von 8`,SEEING_TXT[t7.seeing], t7.seeing<=3?"good":t7.seeing<=5?"warn":"bad"]);
-  if(t7&&t7.transp) m.push(["Transparenz (7Timer)",`${t7.transp} von 8`, t7.transp<=2?"sehr klar":t7.transp<=4?"gut":t7.transp<=6?"mäßig":"dunstig", t7.transp<=3?"good":t7.transp<=5?"warn":"bad"]);
+  if(seeN){
+    const cmp = t7&&t7.seeing ? `, 7Timer: ${t7.seeing}` : "";
+    m.push(["Seeing",`${seeN.val} von 8, etwa ${SEEING_TXT[seeN.val]}`,`Jetstream ${nf(seeN.jet)} km/h${cmp}`, seeCol(seeN.val)]);
+  } else if(t7&&t7.seeing) m.push(["Seeing (7Timer)",`${t7.seeing} von 8`,SEEING_TXT[t7.seeing], seeCol(t7.seeing)]);
+  if(trN){
+    const cmp = t7&&t7.transp ? `, 7Timer: ${t7.transp}` : "";
+    m.push(["Transparenz",`${trN} von 8`,`${transpTxt(trN)}${cmp}`, seeCol(trN)]);
+  } else if(t7&&t7.transp) m.push(["Transparenz (7Timer)",`${t7.transp} von 8`, transpTxt(t7.transp), seeCol(t7.transp)]);
   if(aq&&aq.aod!==null) m.push(["Aerosole (CAMS)",`AOD ${nf(aq.aod,2)}`, aq.aod<0.1?"sehr klare Luft":aq.aod<0.2?"klare Luft":aq.aod<0.4?"leichter Dunst":"deutlicher Dunst", aq.aod<0.15?"good":aq.aod<0.3?"warn":"bad"]);
   const n=E.night;
   if(n.dusk) m.push(["Dunkle Phase",`${hm(n.dusk)} bis ${hm(n.dawn)}`,`Sonnenuntergang ${n.sunset?hm(n.sunset):"–"}`,"good"]);
@@ -1179,7 +1258,7 @@ function renderVerdict(E){
   const st=[];
   if(wxState.loading) st.push("Wetterdaten werden geladen …");
   else if(wxState.at) st.push(`Wetter aktualisiert um ${hm(wxState.at)} Uhr.`);
-  for(const e of [wxState.err,wxState.err7,wxState.errAq]) if(e) st.push(e);
+  for(const e of [wxState.err,wxState.errPl,wxState.err7,wxState.errAq]) if(e) st.push(e);
 
   $("#verdict").style.borderColor = darkF===0?"var(--line)":col;
   $("#verdict").innerHTML = `
@@ -1205,7 +1284,7 @@ function jetAt(t){
   return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;
 }
 function computeOutlook(){
-  const L=loc(); const key=`${L.lat},${L.lon},${wxState.at},${!!WX},${!!T7}`;
+  const L=loc(); const key=`${L.lat},${L.lon},${wxState.at},${!!WX},${!!T7},${!!PL}`;
   if(key===OUTKEY&&OUT) return OUT;
   const now=new Date(); const base=new Date(now); base.setHours(18,0,0,0);
   if(now.getHours()<6) base.setDate(base.getDate()-1);
@@ -1224,7 +1303,9 @@ function computeOutlook(){
         cnt++; clearSum+=Math.pow(1-c.avg/100,1.2); spreadSum+=c.spread;
         if(c.avg<30){ if(!run) rs=t-1800000; run++; if(run>best.len) best={len:run,s:rs,e:t+1800000}; } else run=0;
       } else run=0;
-      const r=t7At(t); if(r){ if(r.transp) tr.push(r.transp); if(r.seeing) se.push(r.seeing); }
+      const sN=seeingAt(t), tN=transpAt(t), r=t7At(t);
+      if(sN) se.push(sN.val); else if(r&&r.seeing) se.push(r.seeing);
+      if(tN) tr.push(tN); else if(r&&r.transp) tr.push(r.transp);
       const j=jetAt(t); if(j!==null) jet.push(j);
     }
     const k=moonPhase(n.minT).k, moonImpact=(moonUp/hrs.length)*k;
@@ -1260,8 +1341,9 @@ function nightInfo(o){
   else if(o.best.len===1) parts.push(`kurze Lücke um ${hm(o.best.s)} Uhr`);
   else parts.push("kaum Wolkenlücken");
   parts.push(o.moonUp<0.05||o.k<0.1 ? "kein störender Mond" : `Mond ${nf(o.k*100)} %${o.moonUp<0.5?", nur zeitweise am Himmel":""}`);
-  if(o.seeing) parts.push(`Seeing ${o.seeing<=3?"gut":o.seeing<=5?"mittel":"schlecht"}`);
+  if(o.seeing) parts.push(`Seeing ${o.seeing<=2.5?"sehr gut":o.seeing<=3.5?"gut":o.seeing<=5?"mittel":"schlecht"}`);
   else if(o.jet!==null) parts.push(o.jet<70?"ruhige Luft erwartet":o.jet<120?"etwas Luftunruhe":"unruhige Luft");
+  if(o.transp&&o.transp>=5) parts.push("diesige Luft");
   if(o.n.wType!=="astro") parts.push("nicht ganz dunkel");
   return (parts.join(", ")+`. ${o.conf}.`).replace(/ %/g,"\u00a0%");
 }
@@ -1345,8 +1427,14 @@ function renderTimeline(E){
         return `<div class="c${t===sel?" sel":""}" style="background:color-mix(in srgb, var(--good) ${Math.round(100-c)}%, var(--cloud));color:${c<45?"var(--sky)":"var(--ink)"}">${Math.round(c)}</div>`; })]);
     }
   }
+  if(PL){
+    rows.push(["Seeing",hours.map(t=>{ const s=seeingAt(t+1800000); const v=s&&s.val;
+      return `<div class="c${t===sel?" sel":""}" style="${v?`color:var(--${seeCol(v)})`:""}">${v||"·"}</div>`; })]);
+    rows.push(["Transparenz",hours.map(t=>{ const v=transpAt(t+1800000);
+      return `<div class="c${t===sel?" sel":""}" style="${v?`color:var(--${seeCol(v)})`:""}">${v||"·"}</div>`; })]);
+  }
   if(T7){
-    rows.push(["Seeing",hours.map(t=>{ const r=t7At(t+1800000); const v=r&&r.seeing;
+    rows.push(["7Timer Seeing",hours.map(t=>{ const r=t7At(t+1800000); const v=r&&r.seeing;
       return `<div class="c${t===sel?" sel":""}" style="${v?`color:var(--${v<=3?"good":v<=5?"warn":"bad"})`:""}">${v||"·"}</div>`; })]);
   }
   $("#tl").style.gridTemplateColumns=`auto repeat(${hours.length},44px)`;
@@ -1369,7 +1457,9 @@ function renderWx(){
     ["Niederschlag",x=>f(x.precipitation,"mm",1)],
     ["Sichtweite",x=>x.visibility===null||x.visibility===undefined?"–":`${nf(x.visibility/1000)} km`]
   ];
-  $("#wx").innerHTML=`<table><thead><tr><th>${hm(T)} Uhr</th>${ms.map(m=>`<th>${esc(m.label)}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td>${ms.map(m=>`<td>${r[1](m.v)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+  const sN=seeingAt(T);
+  const seeRow = sN ? `<tr><td>Seeing (berechnet)</td>${ms.map(m=>{ const p=sN.per.find(x=>x.label===m.label); return `<td>${p?`${p.val} von 8`:"–"}</td>`; }).join("")}</tr>` : "";
+  $("#wx").innerHTML=`<table><thead><tr><th>${hm(T)} Uhr</th>${ms.map(m=>`<th>${esc(m.label)}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td>${ms.map(m=>`<td>${r[1](m.v)}</td>`).join("")}</tr>`).join("")}${seeRow}</tbody></table>`;
 }
 
 let Q="";
