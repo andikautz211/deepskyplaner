@@ -185,11 +185,18 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
       <div class="field">
         <label for="eq">Ausrüstung</label>
         <select id="eq">
-          <option value="eye">Bloßes Auge</option>
-          <option value="bino">Fernglas (z. B. 10×50)</option>
-          <option value="s100">Teleskop bis 100 mm</option>
-          <option value="s150">Teleskop 130–200 mm</option>
-          <option value="s250">Dobson ab 250 mm</option>
+          <optgroup label="Visuell beobachten">
+            <option value="eye">Bloßes Auge</option>
+            <option value="bino">Fernglas (z. B. 10×50)</option>
+            <option value="s100">Teleskop bis 100 mm</option>
+            <option value="s150">Teleskop 130–200 mm</option>
+            <option value="s250">Dobson ab 250 mm</option>
+          </optgroup>
+          <optgroup label="Smart-Teleskop (Fotografie)">
+            <option value="s50">Seestar S50 (Bildfeld 1,29° × 0,73°)</option>
+            <option value="s30">Seestar S30 (Bildfeld 2,1° × 1,2°)</option>
+            <option value="dmini">Dwarf mini (Bildfeld 2,1° × 1,2°)</option>
+          </optgroup>
         </select>
       </div>
       <div class="field">
@@ -233,6 +240,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   <div class="tblwrap" id="wx"></div>
 
   <h2>Lohnende Objekte</h2>
+  <input type="search" id="q" placeholder="Objekt suchen, z. B. M 51, NGC 7000 oder Herznebel" aria-label="Objekt suchen" style="width:100%;margin-bottom:10px">
   <div class="filters" id="types"></div>
   <ul class="objs" id="objs"></ul>
   <div id="objMore"></div>
@@ -241,7 +249,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   <div class="links" id="links"></div>
 
   <footer>
-    Wetterdaten: Open-Meteo (Modelle DWD ICON, ECMWF IFS, NOAA GFS), Aerosol-Daten: Copernicus CAMS über Open-Meteo, Astro-Vorhersage: 7Timer. Positionen von Sonne, Mond und Objekten werden im Gerät berechnet (Genauigkeit etwa ein Grad).
+    Wetterdaten: Open-Meteo (Modelle DWD ICON, ECMWF IFS, NOAA GFS), Aerosol-Daten: Copernicus CAMS über Open-Meteo, Astro-Vorhersage: 7Timer. Objektkatalog: Auswahl aus <a href="https://github.com/mattiaverga/OpenNGC" style="color:inherit">OpenNGC</a> von Mattia Verga (CC BY-SA 4.0), ergänzt um einige Sharpless-Objekte. Positionen von Sonne, Mond und Objekten werden im Gerät berechnet (Genauigkeit etwa ein Grad).
   </footer>
 </main>
 
@@ -274,156 +282,566 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
 
 <script>
 "use strict";
-/* ---------- Katalog (J2000): ID | RA h | Dec ° | mag | Typ | Name | Sternbild | Flächenhelligkeits-Zuschlag ---------- */
-const CAT_RAW = `M1|5.575|22.01|8.4|SNR|Krebsnebel|Tau|0.5
-M2|21.558|-0.82|6.5|GC||Aqr
-M3|13.703|28.38|6.2|GC||CVn
-M4|16.393|-26.53|5.6|GC||Sco|0.5
-M5|15.310|2.08|5.6|GC||Ser
-M6|17.668|-32.25|4.2|OC|Schmetterlingshaufen|Sco
-M7|17.898|-34.82|3.3|OC|Ptolemäus-Haufen|Sco
-M8|18.060|-24.38|6.0|EN|Lagunennebel|Sgr
-M9|17.320|-18.52|7.7|GC||Oph
-M10|16.952|-4.10|6.6|GC||Oph
-M11|18.852|-6.27|5.8|OC|Wildentenhaufen|Sct
-M12|16.787|-1.95|6.7|GC||Oph
-M13|16.695|36.46|5.8|GC|Herkuleshaufen|Her
-M14|17.627|-3.25|7.6|GC||Oph
-M15|21.500|12.17|6.2|GC||Peg
-M16|18.313|-13.78|6.0|EN|Adlernebel|Ser|0.5
-M17|18.347|-16.18|6.0|EN|Omeganebel|Sgr
-M18|18.332|-17.13|7.5|OC||Sgr
-M19|17.043|-26.27|6.8|GC||Oph
-M20|18.043|-23.03|6.3|EN|Trifidnebel|Sgr|0.7
-M21|18.077|-22.50|6.5|OC||Sgr
-M22|18.607|-23.90|5.1|GC||Sgr
-M23|17.950|-19.02|6.9|OC||Sgr
-M24|18.283|-18.52|4.6|OC|Sagittarius-Sternwolke|Sgr
-M25|18.528|-19.25|4.6|OC||Sgr
-M26|18.753|-9.38|8.0|OC||Sct
-M27|19.993|22.72|7.4|PN|Hantelnebel|Vul
-M28|18.410|-24.87|6.8|GC||Sgr
-M29|20.398|38.52|7.1|OC||Cyg
-M30|21.673|-23.18|7.2|GC||Cap
-M31|0.712|41.27|3.4|GX|Andromedagalaxie|And
-M32|0.712|40.87|8.1|GX|Begleiter von M31|And
-M33|1.564|30.66|5.7|GX|Dreiecksgalaxie|Tri|2
-M34|2.702|42.78|5.5|OC||Per
-M35|6.148|24.33|5.3|OC||Gem
-M36|5.602|34.13|6.3|OC||Aur
-M37|5.873|32.55|6.2|OC||Aur
-M38|5.478|35.83|7.4|OC||Aur
-M39|21.537|48.43|4.6|OC||Cyg
-M40|12.373|58.08|8.4|DS|Winnecke 4|UMa
-M41|6.767|-20.73|4.5|OC||CMa
-M42|5.588|-5.39|4.0|EN|Orionnebel|Ori
-M43|5.593|-5.27|9.0|EN|De-Mairans-Nebel|Ori
-M44|8.670|19.67|3.7|OC|Praesepe (Krippe)|Cnc
-M45|3.783|24.12|1.6|OC|Plejaden|Tau
-M46|7.697|-14.82|6.1|OC||Pup
-M47|7.610|-14.50|4.4|OC||Pup
-M48|8.227|-5.75|5.8|OC||Hya
-M49|12.497|8.00|8.4|GX||Vir
-M50|7.053|-8.33|5.9|OC||Mon
-M51|13.498|47.20|8.4|GX|Whirlpool-Galaxie|CVn|0.5
-M52|23.403|61.58|7.3|OC||Cas
-M53|13.215|18.17|7.6|GC||Com
-M54|18.918|-30.48|7.6|GC||Sgr
-M55|19.667|-30.97|6.3|GC||Sgr|0.5
-M56|19.277|30.18|8.3|GC||Lyr
-M57|18.893|33.03|8.8|PN|Ringnebel|Lyr
-M58|12.628|11.82|9.7|GX||Vir
-M59|12.700|11.65|9.6|GX||Vir
-M60|12.728|11.55|8.8|GX||Vir
-M61|12.365|4.47|9.7|GX||Vir|0.5
-M62|17.020|-30.12|6.5|GC||Oph
-M63|13.263|42.03|8.6|GX|Sonnenblumengalaxie|CVn
-M64|12.945|21.68|8.5|GX|Black-Eye-Galaxie|Com
-M65|11.315|13.08|9.3|GX|Leo-Triplett|Leo
-M66|11.338|12.98|8.9|GX|Leo-Triplett|Leo
-M67|8.857|11.82|6.1|OC||Cnc
-M68|12.658|-26.75|7.8|GC||Hya
-M69|18.523|-32.35|7.6|GC||Sgr
-M70|18.720|-32.30|7.9|GC||Sgr
-M71|19.897|18.78|8.2|GC||Sge
-M72|20.892|-12.53|9.3|GC||Aqr
-M73|20.983|-12.63|9.0|OC|Sternmuster|Aqr
-M74|1.612|15.78|9.4|GX|Phantom-Galaxie|Psc|1.5
-M75|20.102|-21.92|8.5|GC||Sgr
-M76|1.705|51.57|10.1|PN|Kleiner Hantelnebel|Per
-M77|2.712|-0.01|8.9|GX||Cet
-M78|5.778|0.05|8.3|RN||Ori
-M79|5.407|-24.52|7.7|GC||Lep
-M80|16.283|-22.98|7.3|GC||Sco
-M81|9.926|69.07|6.9|GX|Bodes Galaxie|UMa
-M82|9.931|69.68|8.4|GX|Zigarrengalaxie|UMa
-M83|13.617|-29.87|7.5|GX|Südliche Feuerradgalaxie|Hya|1
-M84|12.418|12.88|9.1|GX|Markarjansche Kette|Vir
-M85|12.423|18.18|9.1|GX||Com
-M86|12.437|12.95|8.9|GX|Markarjansche Kette|Vir
-M87|12.514|12.39|8.6|GX|Virgo A|Vir
-M88|12.533|14.42|9.6|GX||Com
-M89|12.595|12.55|9.8|GX||Vir
-M90|12.613|13.17|9.5|GX||Vir
-M91|12.590|14.50|10.2|GX||Com
-M92|17.285|43.13|6.4|GC||Her
-M93|7.743|-23.87|6.0|OC||Pup
-M94|12.848|41.12|8.2|GX|Krokodilauge|CVn
-M95|10.733|11.70|9.7|GX||Leo
-M96|10.780|11.82|9.2|GX||Leo
-M97|11.248|55.02|9.9|PN|Eulennebel|UMa|0.5
-M98|12.230|14.90|10.1|GX||Com
-M99|12.313|14.42|9.9|GX||Com
-M100|12.382|15.82|9.3|GX||Com|0.5
-M101|14.053|54.35|7.9|GX|Feuerradgalaxie|UMa|2
-M102|15.108|55.76|9.9|GX|Spindelgalaxie|Dra
-M103|1.555|60.70|7.4|OC||Cas
-M104|12.667|-11.62|8.0|GX|Sombrero-Galaxie|Vir
-M105|10.797|12.58|9.3|GX||Leo
-M106|12.317|47.30|8.4|GX||CVn
-M107|16.542|-13.05|7.9|GC||Oph
-M108|11.193|55.67|10.0|GX|Surfbrett-Galaxie|UMa
-M109|11.960|53.38|9.8|GX||UMa
-M110|0.673|41.68|8.5|GX|Begleiter von M31|And|1
-NGC 869/884|2.333|57.13|4.3|OC|h und χ Persei (Doppelhaufen)|Per
-NGC 7000|20.983|44.33|4.0|EN|Nordamerikanebel|Cyg|4
-NGC 6992|20.943|31.72|7.0|SNR|Cirrusnebel (Ostteil)|Cyg|2
-NGC 6888|20.203|38.35|7.4|EN|Mondsichelnebel|Cyg|2.5
-NGC 7293|22.493|-20.84|7.3|PN|Helixnebel|Aqr|2
-NGC 253|0.793|-25.29|7.2|GX|Sculptor-Galaxie|Scl
-NGC 457|1.322|58.33|6.4|OC|Eulenhaufen|Cas
-NGC 663|1.770|61.23|7.1|OC||Cas
-NGC 7789|23.950|56.72|6.7|OC|Carolines Rose|Cas
-NGC 7662|23.432|42.54|8.6|PN|Blauer Schneeball|And
-NGC 6543|17.977|66.63|8.1|PN|Katzenaugennebel|Dra
-NGC 6826|19.748|50.53|8.8|PN|Blinkender Nebel|Cyg
-NGC 2392|7.486|20.91|9.1|PN|Eskimonebel|Gem
-NGC 891|2.376|42.35|10.0|GX|Kantengalaxie|And|1
-NGC 4565|12.606|25.99|9.6|GX|Nadelgalaxie|Com
-NGC 4631|12.703|32.54|9.2|GX|Walgalaxie|CVn
-NGC 2403|7.614|65.60|8.4|GX||Cam|1
-NGC 752|1.962|37.78|5.7|OC||And
-NGC 2244|6.538|4.94|4.8|OC|Rosettenhaufen|Mon
-NGC 2264|6.680|9.90|3.9|OC|Weihnachtsbaumhaufen|Mon
-NGC 1499|4.050|36.42|6.0|EN|Kaliforniennebel|Per|5
-Stock 2|2.250|59.50|4.4|OC|Muskelmann-Haufen|Cas
-Mel 20|3.400|49.50|1.2|OC|Alpha-Persei-Haufen|Per
-Cr 399|19.430|20.18|3.6|OC|Kleiderbügel|Vul
-Albireo|19.512|27.96|3.1|DS|Goldgelb-blauer Doppelstern|Cyg
-Mizar|13.399|54.93|2.2|DS|Mizar und Alkor|UMa`;
-
+/* ---------- Katalog: Auswahl aus OpenNGC (CC BY-SA 4.0) plus Ergänzungen ----------
+   ID | RA ° | Dec ° | mag | Typ | Name | Sternbild | Größe ′ | Breite ′ | Alias | Flächenhelligkeit (optional) */
+const CAT_RAW = `M 1|83.633|22.01|8.4|SNR|Krebsnebel|Tau|8|4|NGC 1952|
+M 2|323.363|-0.82|6.2|GC||Aqr|8.4|8.4|NGC 7089|
+M 3|205.547|28.38|6.4|GC||CVn|16.2|16.2|NGC 5272|
+M 4|245.897|-26.53|5.4|GC||Sco|28.2|28.2|NGC 6121|
+M 5|229.641|2.08|6|GC||Ser|15|15|NGC 5904|
+M 6|265.086|-32.25|3.8|OC|Schmetterlingshaufen|Sco|15.6|15.6|NGC 6405|
+M 7|268.463|-34.79|2.8|OC|Ptolemäus-Haufen|Sco|22.2|22.2|NGC 6475|
+M 8|270.922|-24.38|4.3|EN|Lagunennebel|Sgr|45|30|NGC 6523|
+M 9|259.799|-18.52|8.4|GC||Oph|6.9|6.9|NGC 6333|
+M 10|254.287|-4.10|5|GC||Oph|9.3|9.3|NGC 6254|
+M 11|282.775|-6.27|5.6|OC|Wildentenhaufen|Sct|9|9|NGC 6705|
+M 12|251.811|-1.95|6.1|GC||Oph|11.1|11.1|NGC 6218|
+M 13|250.423|36.46|5.8|GC|Herkuleshaufen|Her|16.5|16.5|NGC 6205|
+M 14|264.401|-3.25|5.7|GC||Oph|9.9|9.9|NGC 6402|
+M 15|322.493|12.17|2.3|GC||Peg|11.1|11.1|NGC 7078|
+M 16|274.701|-13.81|5.9|EN|Adlernebel|Ser|120|25|NGC 6611|
+M 17|275.196|-16.17|5.3|EN|Omeganebel|Sgr|12.6|12.6|NGC 6618|
+M 18|274.994|-17.10|6.5|OC||Sgr|6|6|NGC 6613|
+M 19|255.657|-26.27|5.6|GC||Oph|7.5|7.5|NGC 6273|
+M 20|270.675|-22.97|5.6|EN|Trifidnebel|Sgr|28|28|NGC 6514|
+M 21|271.056|-22.49|5.9|OC||Sgr|6|6|NGC 6531|
+M 22|279.101|-23.90|5.1|GC||Sgr|12.6|12.6|NGC 6656|
+M 23|269.270|-18.99|5.3|OC||Sgr|16.8|16.8|NGC 6494|
+M 24|274.234|-18.51|4.5|OC|Kleine Sagittarius-Sternwolke|Sgr|120|60|IC 4715|
+M 25|277.945|-19.11|4.6|OC||Sgr|14.1|14.1|IC 4725|
+M 26|281.328|-9.38|7.3|OC||Sct|6|6|NGC 6694|
+M 27|299.902|22.72|6.9|PN|Hantelnebel|Vul|6.7|6.7|NGC 6853|
+M 28|276.137|-24.87|6.9|GC||Sgr|5.1|5.1|NGC 6626|
+M 29|305.991|38.51|6.6|OC||Cyg|3.6|3.6|NGC 6913|
+M 30|325.092|-23.18|7.1|GC||Cap|9|9|NGC 7099|
+M 31|10.685|41.27|3.4|GX|Andromedagalaxie|And|177.8|69.7|NGC 224|
+M 32|10.674|40.87|8.1|GX|Begleiter von M31|And|7.7|4.9|NGC 221|
+M 33|23.462|30.66|5.6|GX|Dreiecksgalaxie|Tri|62.1|36.7|NGC 598|
+M 34|40.531|42.75|4.7|OC||Per|22.5|22.5|NGC 1039|
+M 35|92.271|24.34|5.3|OC||Gem|24|24|NGC 2168|
+M 36|84.074|34.14|5.4|OC||Aur|7.2|7.2|NGC 1960|
+M 37|88.076|32.55|5.5|OC||Aur|11.4|11.4|NGC 2099|
+M 38|82.177|35.85|6|OC||Aur|9.6|9.6|NGC 1912|
+M 39|322.951|48.44|4|OC||Cyg|19.5|19.5|NGC 7092|
+M 40|185.567|58.08|8|DS|Winnecke 4|UMa||||
+M 41|101.500|-20.75|4.2|OC||CMa|12|12|NGC 2287|
+M 42|83.819|-5.39|3.3|EN|Orionnebel|Ori|90|60|NGC 1976|
+M 43|83.881|-5.27|8.3|EN|De-Mairans-Nebel|Ori|20|15|NGC 1982|
+M 44|130.093|19.67|2.8|OC|Praesepe (Krippe)|Cnc|108.6|108.6|NGC 2632|
+M 45|56.869|24.11|1.2|OC|Plejaden|Tau|150|150||
+M 46|115.445|-14.81|5.6|OC||Pup|21|21|NGC 2437|
+M 47|114.146|-14.48|3.7|OC||Pup|19.8|19.8|NGC 2422|
+M 48|123.430|-5.75|5.4|OC||Hya|28.2|28.2|NGC 2548|
+M 49|187.445|8.00|8.3|GX||Vir|10.2|8.4|NGC 4472|
+M 50|105.669|-8.36|5.6|OC||Mon|14.1|14.1|NGC 2323|
+M 51|202.470|47.20|7.9|GX|Whirlpool-Galaxie|CVn|13.7|11.7|NGC 5194|
+M 52|351.202|61.59|6.9|OC||Cas|9.9|9.9|NGC 7654|
+M 53|198.230|18.17|7.8|GC||Com|9|9|NGC 5024|
+M 54|283.764|-30.48|7.7|GC||Sgr|5.1|5.1|NGC 6715|
+M 55|294.998|-30.96|6.5|GC||Sgr|12|12|NGC 6809|
+M 56|289.148|30.18|8.4|GC||Lyr|5.8|5.8|NGC 6779|
+M 57|283.396|33.03|8.8|PN|Ringnebel|Lyr|1.3|1.3|NGC 6720|
+M 58|189.431|11.82|9.7|GX||Vir|5|3.8|NGC 4579|
+M 59|190.509|11.65|9.6|GX||Vir|4.5|3.2|NGC 4621|
+M 60|190.917|11.55|8.8|GX||Vir|6.8|5.5|NGC 4649|
+M 61|185.479|4.47|9.5|GX||Vir|6.9|6.6|NGC 4303|
+M 62|255.302|-30.11|6.5|GC||Oph|7.8|7.8|NGC 6266|
+M 63|198.956|42.03|8.6|GX|Sonnenblumengalaxie|CVn|11.8|7.2|NGC 5055|
+M 64|194.182|21.68|8.5|GX|Black-Eye-Galaxie|Com|10.5|5.3|NGC 4826|
+M 65|169.733|13.09|9.3|GX|Leo-Triplett|Leo|7.6|2|NGC 3623|
+M 66|170.062|12.99|8.9|GX|Leo-Triplett|Leo|10.3|4.6|NGC 3627|
+M 67|132.834|11.81|6.9|OC||Cnc|33|33|NGC 2682|
+M 68|189.867|-26.74|8|GC||Hya|6.6|6.6|NGC 4590|
+M 69|277.847|-32.35|7.6|GC||Sgr|5.7|5.7|NGC 6637|
+M 70|280.803|-32.29|7.9|GC||Sgr|6.6|6.6|NGC 6681|
+M 71|298.442|18.78|8.2|GC||Sge|6.9|6.9|NGC 6838|
+M 72|313.366|-12.54|9|GC||Aqr|4.5|4.5|NGC 6981|
+M 73|314.745|-12.63|9|OC|Sternmuster|Aqr|3|3|NGC 6994|
+M 74|24.174|15.78|9|GX|Phantom-Galaxie|Psc|9.9|9.3|NGC 628|
+M 75|301.520|-21.92|8.3|GC||Sgr|3.6|3.6|NGC 6864|
+M 76|25.582|51.58|10.1|PN|Kleiner Hantelnebel|Per|1.1|1.1|NGC 650|
+M 77|40.670|-0.01|9|GX||Cet|6.1|5.6|NGC 1068|
+M 78|86.691|0.08|7.3|RN||Ori|4.5|4.5|NGC 2068|
+M 79|81.044|-24.52|8.2|GC||Lep|7.2|7.2|NGC 1904|
+M 80|244.260|-22.98|7.3|GC||Sco|5.7|5.7|NGC 6093|
+M 81|148.888|69.07|6.9|GX|Bodes Galaxie|UMa|21.6|11.2|NGC 3031|
+M 82|148.970|69.68|8.2|GX|Zigarrengalaxie|UMa|11|5.1|NGC 3034|
+M 83|204.254|-29.87|7.1|GX|Südliche Feuerradgalaxie|Hya|13.6|13.2|NGC 5236|
+M 84|186.266|12.89|9.3|GX|Markarjansche Kette|Vir|7.4|6.4|NGC 4374|
+M 85|186.350|18.19|9.1|GX||Com|7|5.3|NGC 4382|
+M 86|186.549|12.95|8.9|GX|Markarjansche Kette|Vir|11.5|8.4|NGC 4406|
+M 87|187.706|12.39|9|GX|Virgo A|Vir|7.1|6.7|NGC 4486|
+M 88|187.997|14.42|9.5|GX||Com|8.7|4.4|NGC 4501|
+M 89|188.916|12.56|10|GX||Vir|8.1|8|NGC 4552|
+M 90|189.207|13.16|9.5|GX||Vir|9.1|3.8|NGC 4569|
+M 91|188.860|14.50|10.2|GX||Com|5.5|4.5|NGC 4548|
+M 92|259.280|43.14|6.5|GC||Her|14.4|14.4|NGC 6341|
+M 93|116.122|-23.85|5.9|OC||Pup|15|15|NGC 2447|
+M 94|192.721|41.12|8|GX|Krokodilauge|CVn|7.7|6.7|NGC 4736|
+M 95|160.990|11.70|9.8|GX||Leo|7.2|4.5|NGC 3351|
+M 96|161.691|11.82|9.2|GX||Leo|8.3|5.5|NGC 3368|
+M 97|168.699|55.02|9.9|PN|Eulennebel|UMa|3.6|3.6|NGC 3587|
+M 98|183.451|14.90|10.1|GX||Com|11|2.7|NGC 4192|
+M 99|184.707|14.42|9.7|GX|Coma-Feuerrad|Com|5|4.7|NGC 4254|
+M 100|185.728|15.82|9.3|GX||Com|6.1|5.6|NGC 4321|
+M 101|210.802|54.35|7.7|GX|Feuerradgalaxie|UMa|24|23.1|NGC 5457|
+M 102|226.620|55.76|9.9|GX|Spindelgalaxie|Dra|6.3|2.7|NGC 5866, Zuordnung zu M102 umstritten|
+M 103|23.341|60.66|7|OC||Cas|4.5|4.5|NGC 581|
+M 104|189.998|-11.62|8.5|GX|Sombrero-Galaxie|Vir|8.4|4.9|NGC 4594|
+M 105|161.957|12.58|9.3|GX||Leo|4.9|4.2|NGC 3379|
+M 106|184.740|47.30|8.4|GX||CVn|17|7.2|NGC 4258|
+M 107|248.133|-13.05|7.9|GC||Oph|7.8|7.8|NGC 6171|
+M 108|167.879|55.67|10|GX|Surfbrett-Galaxie|UMa|4|1.7|NGC 3556|
+M 109|179.400|53.37|9.8|GX||UMa|8.1|5.6|NGC 3992|
+M 110|10.092|41.69|8.2|GX|Begleiter von M31|And|16.2|9.6|NGC 205|
+Barnard 33|85.246|-2.46||DN|Pferdekopfnebel|Ori|8|6||15.8
+Cr 399|291.350|20.18|3.2|OC|Kleiderbügel|Vul|70|70||
+HCG 79|239.800|20.76|13.5|GX|Seyferts Sextett|Ser|2.8|2.8||
+HCG 92|338.996|33.96|12.5|GX|Stephans Quintett|Peg|4.4|4.4||
+Harvard 20|298.275|18.33|7.7|OC||Sge|5.1|5.1||
+Harvard 21|358.555|61.74|9|OC||Cas|1.8|1.8||
+IC 10|5.072|59.30|10.3|GX||Cas|6.8|6||
+IC 113|21.606|19.19|10.2|GX||Psc|0.3|0.3||
+IC 127|22.448|-6.98|9.2|GX||Cet|1.7|0.5||
+IC 1274|272.463|-23.65||EN||Sgr|20|5||
+IC 1283|274.320|-19.76||EN||Sgr|15|15||
+IC 1284|274.415|-19.67|7|EN||Sgr|17|15.1||
+IC 1287|277.857|-10.80|5.4|RN||Sct|20|10||
+IC 1310|302.504|34.97||EN||Cyg|15|3||
+IC 1340|314.034|31.05||SNR||Cyg|25.1|19.9||
+IC 1396|324.740|57.49||EN|Elefantenrüsselnebel|Cep|170|140||
+IC 1613|16.199|2.12|9.3|GX||Cet|18.3|17.1||
+IC 1795|36.633|62.04||EN||Cas|12|12||
+IC 1805|38.173|61.46|6.3|EN|Herznebel|Cas|150|150||
+IC 1831|40.985|62.41||EN||Cas|120.2|120.2||
+IC 1848|42.794|60.40|6.2|EN|Seelennebel|Cas|150|75||
+IC 2149|89.100|46.10|10.5|PN||Aur|0.1|0.1||
+IC 2165|95.428|-12.99|10.5|PN||CMa|0.1|0.1||
+IC 2177|106.154|-10.47||RN|Möwennebel|Mon|20|20||
+IC 2574|157.098|68.41|10.1|GX|Coddingtons Nebel|UMa|12.9|5.6||
+IC 341|55.232|21.96||EN||Tau|134.9|134.9||
+IC 342|56.702|68.10|9|GX|Versteckte Galaxie|Cam|19.8|18.8||
+IC 348|56.142|32.16||EN|Omikron-Persei-Wolke|Per|10|10||
+IC 349|56.584|23.94||RN|Barnards Merope-Nebel|Tau|25.7|25.7||
+IC 353|58.254|25.85||EN||Tau|182|30.2||
+IC 354|58.491|23.15||EN||Tau|128.8|128.8||
+IC 356|61.945|69.81|10.2|GX||Cam|4|3.7||
+IC 3568|188.278|82.56|10.6|PN||Cam|0.4|0.4||
+IC 359A|64.671|28.29||RN||Tau|15|10||
+IC 360|62.261|26.13||EN||Tau|180|100||
+IC 405|79.123|34.36|9.3|EN|Flammender-Stern-Nebel|Aur|30|20||
+IC 410|80.675|33.37||EN|Kaulquappennebel|Aur|40|30||
+IC 417|82.025|34.42||EN||Aur|13|10||
+IC 418|81.867|-12.70|9.4|PN||Lep|0.2|0.2||
+IC 426|84.131|-0.30||EN||Ori|10|3||
+IC 4296|204.163|-33.97|10.5|GX||Cen|4.6|2.4||
+IC 430|84.650|-7.08|14.4|EN||Ori|11|11||
+IC 432|85.233|-1.51||RN||Ori|10|10||
+IC 434|85.254|-2.45|10.3|EN|Nebel hinter dem Pferdekopf|Ori|60|10||
+IC 443|94.156|22.53|11.3|SNR|Quallennebel|Gem|50|40||
+IC 447|97.751|9.90|7|EN||Mon|25|20||
+IC 448|98.189|7.39||EN||Mon|15|10||
+IC 4591|243.076|-27.93||EN||Sco|12|10||
+IC 4592|242.994|-19.45|3.2|RN||Sco|60|40||
+IC 4593|242.935|12.07|10.2|PN||Her|0.7|0.7||
+IC 4601|245.074|-20.09||EN||Sco|20|10||
+IC 4603|246.352|-24.47||EN||Oph|20|5||
+IC 4604|246.380|-23.44|4.4|EN|Rho-Ophiuchi-Nebel|Oph|60|25||
+IC 4605|247.552|-25.12|4|EN||Sco|30|15||
+IC 4634|255.390|-21.83|10|PN||Oph|0.1|0.1||
+IC 4665|266.613|5.65|3.8|OC|Sommer-Bienenkorb|Oph|24.6|24.6||
+IC 4685|272.323|-23.99||EN||Sgr|15|10||
+IC 4701|274.149|-16.65||EN||Sgr|60|40||
+IC 4703|274.734|-13.85|5.9|EN|Adlernebel|Ser|5|5||
+IC 4756|279.715|5.46|4.3|OC||Ser|24|24||
+IC 4776|281.461|-33.34|10.8|PN||Sgr|0.1|0.1||
+IC 4996|304.139|37.56|7.2|OC||Cyg|6|6||
+IC 4997|305.037|16.73|10.5|PN||Sge|0|0||
+IC 5068|312.624|42.48||EN||Cyg|40|30||
+IC 5070|312.753|44.40|7.3|EN|Pelikannebel|Cyg|60|50||
+IC 5146|328.370|47.27|7.1|EN|Kokonnebel|Cyg|10|10||
+IC 59|14.369|61.14||RN|Gamma-Cas-Nebel|Cas|10|5||
+IC 63|14.870|60.91|12.6|EN|Gamma-Cas-Nebel (Geist)|Cas|10|3||
+Mel 111|186.275|26.10||OC|Coma-Sternhaufen|Com|253.5|253.5||
+Mel 25|66.725|15.87||OC|Hyaden|Tau|330|330||
+NGC 1023|40.100|39.06|8.9|GX||Per|7.4|3.1||
+NGC 1027|40.646|61.59|6.6|OC||Cas|7.8|7.8||
+NGC 1055|40.438|0.44|10.6|GX||Cet|6.9|3.5||
+NGC 1084|41.500|-7.58|10.5|GX||Eri|3.4|2.2||
+NGC 1097|41.579|-30.27|9.4|GX||For|10.6|6.4||
+NGC 1232|47.440|-20.58|9.9|GX||Eri|6.8|5.8||
+NGC 129|7.492|60.21|6.5|OC||Cas|5.4|5.4||
+NGC 1300|49.921|-19.41|10.5|GX||Eri|6|3.1||
+NGC 1332|51.572|-21.34|10.4|GX||Eri|5.3|3.8||
+NGC 1333|52.230|31.37|10.2|RN|Embryonebel|Per|19.5|19.5||
+NGC 134|7.592|-33.24|10.3|GX||Scl|8.4|1.8||
+NGC 1340|52.082|-31.07|10.4|GX||For|5.1|3.1||
+NGC 1342|52.917|37.38|6.6|OC||Per|6.3|6.3||
+NGC 1350|52.784|-33.63|10.3|GX||For|5.2|2.6||
+NGC 1360|53.311|-25.87|8.9|PN||For|6.4|6.4||
+NGC 1380|54.115|-34.98|9.9|GX||For|4.6|2.2||
+NGC 1395|54.624|-23.03|9.7|GX||Eri|4.7|4||
+NGC 1398|54.717|-26.34|9.6|GX||For|7|4.9||
+NGC 1407|55.049|-18.58|9.7|GX||Eri|5.7|5.3||
+NGC 1432|56.457|24.37||RN|Maia-Nebel|Tau|60|40||
+NGC 1435|56.542|23.76||RN|Merope-Nebel|Tau|30|30||
+NGC 1444|57.370|52.66|6.3|OC||Per|3.6|3.6||
+NGC 147|8.300|48.51|9.7|GX|Begleiter von M31|Cas|9.4|5.4||
+NGC 1499|60.810|36.37|4.3|EN|Kaliforniennebel|Per|160|40||
+NGC 1502|61.955|62.33|6.8|OC||Cam|10.2|10.2||
+NGC 1514|62.321|30.78|9.4|PN||Tau|2.2|2.2||
+NGC 1528|63.829|51.21|6.1|OC||Per|9.6|9.6||
+NGC 1532|63.018|-32.87|10|GX||Eri|11.3|3.1||
+NGC 1535|63.566|-12.74|8.9|PN||Eri|0.8|0.8||
+NGC 1545|65.234|50.26|6.2|OC||Per|4.2|4.2||
+NGC 1555|65.498|19.54|9.3|RN|Hinds veränderlicher Nebel|Tau|1.8|1.4||
+NGC 157|8.695|-8.40|10.4|GX||Cet|3.7|1.9||
+NGC 1579|67.558|35.27||EN||Per|10.2|10.2||
+NGC 1582|67.945|43.78|7|OC||Per|7.8|7.8||
+NGC 1647|71.482|19.10|6.1|OC||Tau|27|27||
+NGC 1662|72.121|10.93|6.3|OC||Ori|13.8|13.8||
+NGC 1664|72.773|43.68|7.3|OC||Aur|11.4|11.4||
+NGC 1746|75.959|23.77|6.1|OC||Tau|18|18||
+NGC 1778|77.024|37.02|7.5|OC||Aur|4.5|4.5||
+NGC 1807|77.688|16.51|7|OC||Tau|5.4|5.4||
+NGC 1817|78.109|16.68|7.7|OC||Tau|9.3|9.3||
+NGC 185|9.742|48.34|9.2|GX|Begleiter von M31|Cas|12.9|10.8||
+NGC 1857|80.023|39.34|7|OC||Aur|4.5|4.5||
+NGC 1893|80.684|33.41|7.2|OC||Aur|6|6||
+NGC 1909|76.231|-7.27||RN|Hexenkopfnebel|Eri|180|60||
+NGC 1931|82.856|34.25|10.1|EN|Fliegennebel (Auriga)|Aur|4.8|4.8||
+NGC 1975|83.824|-4.69|6.3|EN||Ori|10|5||
+NGC 1977|83.816|-4.84||EN|Running-Man-Nebel|Ori|10.2|10.2||
+NGC 1980|83.858|-5.91|2.5|EN|Untere Schwertgruppe|Ori|9.3|9.3||
+NGC 1981|83.790|-4.43|4.2|EN|Obere Schwertgruppe|Ori|9|9||
+NGC 2023|85.410|-2.26||RN||Ori|10|8||
+NGC 2024|85.427|-1.86||EN|Flammennebel|Ori|30|30||
+NGC 2064|86.577|0.01||RN||Ori|10|10||
+NGC 2129|90.277|23.32|6.6|OC||Gem|3.9|3.9||
+NGC 2146|94.657|78.36|9.8|GX||Cam|5.3|4.3||
+NGC 2169|92.101|13.96|5.3|OC|„37“-Haufen|Ori|7.2|7.2||
+NGC 2174|92.348|20.66||EN|Affenkopfnebel|Ori|40|30||
+NGC 2183|92.696|-6.21|14.5|EN||Mon|12|12||
+NGC 2217|95.416|-27.23|10.6|GX||CMa|4.6|4.1||
+NGC 2232|97.005|-4.85|3.9|OC||Mon|9.9|9.9||
+NGC 2237|97.728|5.05||EN|Rosettennebel|Mon|80|60||
+NGC 2244|98.070|4.94|4.8|OC|Rosettenhaufen|Mon|24|24||
+NGC 225|10.902|61.77|6.7|OC||Cas|4.2|4.2||
+NGC 2251|98.660|8.37|7|OC||Mon|5.7|5.7||
+NGC 2252|98.679|5.37|7.7|OC||Mon|6.6|6.6||
+NGC 2261|99.790|8.74|11.8|RN|Hubbles veränderlicher Nebel|Mon|2|1||
+NGC 2264|100.243|9.90|3.9|EN|Weihnachtsbaumhaufen und Konusnebel|Mon|11.4|11.4||
+NGC 2280|101.205|-27.64|10.4|GX||CMa|6.5|2.8||
+NGC 2281|102.074|41.08|5.3|OC||Aur|10.8|10.8||
+NGC 2286|101.917|-3.15|7.5|OC||Mon|5.4|5.4||
+NGC 2301|102.939|0.46|5.6|OC|Großer-Vogel-Haufen|Mon|10.2|10.2||
+NGC 2335|106.706|-10.03|7.1|OC||Mon|8.7|8.7||
+NGC 2336|111.767|80.18|10.5|GX||Cam|5|2.8||
+NGC 2343|107.028|-10.62|6.3|OC||Mon|7.5|7.5||
+NGC 2345|107.078|-13.19|7.7|OC||CMa|6.9|6.9||
+NGC 2353|108.626|-10.27|6.6|OC||Mon|6.6|6.6||
+NGC 2354|108.522|-25.69|6.5|OC||CMa|4.8|4.8||
+NGC 2359|109.629|-13.23||EN|Thors Helm|CMa|10|5||
+NGC 2360|109.430|-15.64|6.9|OC|Carolines Haufen|CMa|9|9||
+NGC 2367|110.019|-21.88|7.3|OC||CMa|5.4|5.4||
+NGC 2374|110.984|-13.26|7.8|OC||CMa|9|9||
+NGC 2384|111.291|-21.02|6.8|OC||CMa|4.8|4.8||
+NGC 2392|112.295|20.91|9.4|PN|Eskimonebel|Gem|0.9|0.9||
+NGC 2395|111.804|13.61|8|OC||Gem|4.6|4.6||
+NGC 2396|112.012|-11.72|7.4|OC||Pup|6.6|6.6||
+NGC 2403|114.214|65.60|8.1|GX|Galaxie in der Giraffe|Cam|19.9|10.1||
+NGC 2409|112.903|-17.19|6.8|OC||Pup|0.1|0.1||
+NGC 2414|113.303|-15.45|7.6|OC||Pup|5.4|5.4||
+NGC 2421|114.049|-20.61|8|OC||Pup|5.1|5.1||
+NGC 2423|114.278|-13.87|6.5|OC||Pup|11.7|11.7||
+NGC 2438|115.460|-14.74|9.4|PN||Pup|1.1|1.1||
+NGC 2439|115.189|-31.69|6.6|OC||Pup|8.7|8.7||
+NGC 2440|115.481|-18.21|9.4|PN||Pup|0.3|0.3||
+NGC 2453|116.892|-27.19|7.7|OC||Pup|3|3||
+NGC 246|11.764|-11.87|7.3|PN||Cet|4.1|4.1||
+NGC 247|11.786|-20.76|9|GX||Cet|19.7|5.5||
+NGC 2482|118.793|-24.25|7|OC||Pup|6.6|6.6||
+NGC 2483|118.912|-27.89|7.2|OC||Pup|3.3|3.3||
+NGC 2489|119.062|-30.06|7.9|OC||Pup|4.2|4.2||
+NGC 2506|120.007|-10.77|7.6|OC||Mon|10.8|10.8||
+NGC 2520|121.242|-28.15|6.1|OC||Pup|9.3|9.3||
+NGC 253|11.888|-25.29|7.2|GX|Sculptor-Galaxie|Scl|26.8|4.6||
+NGC 2533|121.767|-29.88|7.5|OC||Pup|5|5||
+NGC 2539|122.654|-12.82|6.3|OC||Pup|12.3|12.3||
+NGC 2567|124.647|-30.64|7.1|OC||Pup|6|6||
+NGC 2571|124.735|-29.75|6.5|OC||Pup|7.2|7.2||
+NGC 2613|128.345|-22.97|10.4|GX||Pyx|7.6|1.8||
+NGC 2655|133.907|78.22|10.3|GX||Cam|3.9|2.1||
+NGC 2663|131.284|-33.79|10.6|GX||Pyx|3.9|2.8||
+NGC 2681|133.386|51.31|10.5|GX||UMa|4|4||
+NGC 2683|133.172|33.42|9.3|GX||Lyn|9.5|2.7||
+NGC 2768|137.906|60.04|9.9|GX||UMa|5.6|2.2||
+NGC 2775|137.584|7.04|10.2|GX||Cnc|4.2|3.4||
+NGC 2784|138.081|-24.17|10.1|GX||Hya|4.8|1.9||
+NGC 281|13.247|56.62||EN|Pacman-Nebel|Cas|35|30||
+NGC 2835|139.470|-22.35|10.4|GX||Hya|6.4|3.7||
+NGC 2841|140.511|50.98|9.4|GX||UMa|6.9|3.3||
+NGC 288|13.198|-26.59|8.1|GC||Scl|9.6|9.6||
+NGC 2903|143.042|21.50|8.8|GX||Leo|11.9|5.3||
+NGC 2976|146.814|67.92|10.1|GX||UMa|5.8|3||
+NGC 2985|147.593|72.28|10.5|GX||UMa|3.6|2.9||
+NGC 2997|146.412|-31.19|9.3|GX||Ant|10.3|6.2||
+NGC 3077|150.829|68.73|9.9|GX||UMa|5.2|4.3||
+NGC 3109|150.779|-26.16|9.7|GX||Hya|16|2.7||
+NGC 3115|151.308|-7.72|9.1|GX|Spindelgalaxie (Sextant)|Sex|7.1|3||
+NGC 3147|154.224|73.40|10.6|GX||Dra|4.1|3.5||
+NGC 3169|153.563|3.47|10.6|GX||Sex|4.3|2.6||
+NGC 3184|154.570|41.42|9.7|GX||UMa|7.4|7.2||
+NGC 3198|154.979|45.55|10.2|GX||UMa|6.5|1.8||
+NGC 3242|156.192|-18.64|7.7|PN|Jupiters Geist|Hya|0.4|0.4||
+NGC 3310|159.691|53.50|10.6|GX||UMa|1.8|1.7||
+NGC 3344|160.880|24.92|9.8|GX||LMi|6.7|6.4||
+NGC 3359|161.654|63.22|10.4|GX||UMa|4.1|2.8||
+NGC 3377|161.926|13.99|10.3|GX||Leo|3.9|1.9||
+NGC 3384|162.070|12.63|10|GX||Leo|5.2|2.4||
+NGC 3412|162.722|13.41|10.5|GX||Leo|4|2.2||
+NGC 3486|165.099|28.98|10.4|GX||LMi|5.8|4.1||
+NGC 3489|165.077|13.90|10.2|GX||Leo|3.4|2||
+NGC 3521|166.452|-0.04|9.1|GX||Leo|8.3|4.5||
+NGC 3585|168.321|-26.75|9.7|GX||Hya|6.6|3.3||
+NGC 3607|169.228|18.05|10|GX||Leo|4.6|4||
+NGC 3621|169.569|-32.81|9.4|GX||Hya|9.8|4||
+NGC 3628|170.071|13.59|9.3|GX|Hamburger-Galaxie (Leo-Triplett)|Leo|11|3.4||
+NGC 3631|170.262|53.17|10|GX||UMa|3.7|3.1||
+NGC 3640|170.279|3.23|10.4|GX||Leo|4.3|3.8||
+NGC 3675|171.536|43.59|10.1|GX||UMa|5.9|3.3||
+NGC 3726|173.338|47.03|10|GX||UMa|5.3|3.5||
+NGC 3810|175.245|11.47|10.6|GX||Leo|3.4|2.3||
+NGC 3893|177.159|48.71|10.1|GX||UMa|2.7|1.4||
+NGC 3898|177.314|56.08|10.6|GX||UMa|3.5|2.1||
+NGC 3923|177.757|-28.81|9.6|GX||Hya|6.9|4.5||
+NGC 3938|178.206|44.12|10.2|GX||UMa|3.5|3.4||
+NGC 3941|178.231|36.99|10.4|GX||UMa|3.5|2.3||
+NGC 3953|178.454|52.33|9.8|GX||UMa|6.1|3.1||
+NGC 40|3.254|72.52|10.6|PN|Fliegennebel|Cep|0.8|0.8||
+NGC 4030|180.098|-1.10|10.5|GX||Vir|3.8|2.6||
+NGC 4038|180.471|-18.87|10.2|GX|Antennen-Galaxien|Crv|5.4|3.8||
+NGC 4039|180.473|-18.89|10.3|GX|Antennen-Galaxien|Crv|5.4|2.7||
+NGC 404|17.363|35.72|10.5|GX||And|3.4|3.4||
+NGC 4051|180.790|44.53|10.1|GX||UMa|4.9|4.3||
+NGC 4088|181.392|50.54|10.6|GX||UMa|7|2.6||
+NGC 4096|181.505|47.48|10.4|GX||UMa|5.7|1.4||
+NGC 4111|181.763|43.07|10.8|GX||CVn|1.8|0.6||
+NGC 4125|182.025|65.17|9.7|GX||Dra|5.9|4.6||
+NGC 4151|182.636|39.41|10.7|GX||CVn|2.9|2.2||
+NGC 4214|183.913|36.33|9.5|GX||CVn|6.8|5.3||
+NGC 4216|183.977|13.15|9.9|GX||Vir|7.8|1.8||
+NGC 4236|184.175|69.46|9.4|GX||Dra|23.5|6.8||
+NGC 4244|184.374|37.81|9.7|GX||CVn|16.2|7.2||
+NGC 4261|184.847|5.83|10.5|GX||Vir|4.2|3.4||
+NGC 4274|184.961|29.61|10.4|GX||Com|3.6|1.7||
+NGC 4278|185.028|29.28|10.2|GX||Com|2.9|2.8||
+NGC 4293|185.304|18.38|10.2|GX||Com|6.2|3.7||
+NGC 4314|185.633|29.90|10.6|GX||Com|3.7|3.6||
+NGC 436|18.991|58.82|7.3|OC||Cas|5.7|5.7||
+NGC 4361|186.128|-18.78|9.6|PN||Crv|1.1|1.1||
+NGC 4365|186.118|7.32|9.4|GX||Vir|5.1|3.7||
+NGC 4395|186.454|33.55|10.1|GX||CVn|4.2|1.4||
+NGC 4414|186.613|31.22|10.2|GX||Com|1.9|1.1||
+NGC 4429|186.860|11.11|10.1|GX||Vir|5.3|2.4||
+NGC 4438|186.940|13.01|10.3|GX|Eyes|Vir|9.2|4||
+NGC 4442|187.016|9.80|10.6|GX||Vir|4.3|1.6||
+NGC 4449|187.046|44.09|8.8|GX|Rechteck-Galaxie|CVn|4.7|2.7||
+NGC 4450|187.123|17.08|10.1|GX||Com|5.5|3.8||
+NGC 4457|187.246|3.57|10.6|GX||Vir|2.8|2.4||
+NGC 4459|187.250|13.98|10.2|GX||Com|4.2|3.2||
+NGC 4473|187.454|13.43|10.1|GX||Com|4.3|2.5||
+NGC 4477|187.509|13.64|10.3|GX||Com|3.7|3.2||
+NGC 4490|187.651|41.64|9.1|GX|Kokon-Galaxie|CVn|6.7|1.6||
+NGC 4494|187.850|25.78|9.8|GX||Com|4.3|4.1||
+NGC 45|3.517|-23.18|10.4|GX||Cet|6.2|4.4||
+NGC 4517|188.190|0.12|10.5|GX||Vir|9|1.4||
+NGC 4526|188.513|7.70|9.6|GX||Vir|9.6|3.3||
+NGC 4527|188.535|2.65|10.5|GX||Vir|6.3|1.7||
+NGC 4535|188.585|8.20|9.9|GX||Vir|8.2|7.5||
+NGC 4536|188.613|2.19|10.4|GX||Vir|7.1|2.5||
+NGC 4546|188.873|-3.79|10.6|GX||Vir|3.2|1.8||
+NGC 4559|188.990|27.96|9.6|GX||Com|10.6|4.8||
+NGC 4565|189.087|25.99|9.4|GX|Nadelgalaxie|Com|16.8|2.9||
+NGC 457|19.886|58.29|6.3|OC|Eulenhaufen|Cas|7.8|7.8||
+NGC 4596|189.983|10.18|10.5|GX||Vir|3.9|3.3||
+NGC 4605|189.997|61.61|10.1|GX||UMa|5.9|2.3||
+NGC 4631|190.533|32.54|8.8|GX|Walgalaxie|CVn|14.4|2.2||
+NGC 4636|190.708|2.69|9.3|GX||Vir|6.3|4.7||
+NGC 4643|190.834|1.98|10.5|GX||Vir|2.2|1.8||
+NGC 4654|190.986|13.13|10.4|GX||Vir|4.7|2.5||
+NGC 4656|190.991|32.17||GX||CVn|8|8||
+NGC 4656 NED01|190.990|32.17|9.1|GX||CVn|6.5|0.7||
+NGC 4664|191.275|3.06|10.4|GX||Vir|4.5|4.5||
+NGC 4697|192.150|-5.80|9.4|GX||Vir|7.1|4.2||
+NGC 4699|192.259|-8.66|9.5|GX||Vir|4|3||
+NGC 4725|192.611|25.50|9.2|GX||Com|9.7|7.1||
+NGC 4753|193.092|-1.20|9.7|GX||Vir|6.5|3.1||
+NGC 4754|193.073|11.31|10.5|GX||Vir|4.2|1.9||
+NGC 4762|193.234|11.23|10.2|GX||Vir|8.3|3.5||
+NGC 488|20.445|5.26|10.3|GX||Psc|5|3.7||
+NGC 4958|196.454|-8.02|10.6|GX||Vir|4.8|1.2||
+NGC 5005|197.734|37.06|9.8|GX||CVn|4.8|1.5||
+NGC 5033|198.364|36.59|10|GX||CVn|9.8|4.6||
+NGC 5061|199.521|-26.84|10.3|GX||Hya|3.8|3||
+NGC 5068|199.728|-21.04|9.9|GX||Vir|7.5|6.7||
+NGC 5084|200.071|-21.83|10.5|GX||Vir|9.9|2.5||
+NGC 5101|200.443|-27.43|10.5|GX||Hya|5.9|5.5||
+NGC 5195|202.498|47.27|9.6|GX||CVn|5.5|4.4||
+NGC 524|21.199|9.54|10.3|GX||Psc|3.4|3.4||
+NGC 5247|204.513|-17.88|10.1|GX||Vir|5.3|4.3||
+NGC 5248|204.383|8.89|10|GX||Boo|4.1|2.4||
+NGC 5253|204.983|-31.64|10.1|GX||Cen|5|2.1||
+NGC 5322|207.314|60.19|10.1|GX||UMa|5.6|3.5||
+NGC 5363|209.030|5.25|10.2|GX||Vir|4.2|2.8||
+NGC 5364|209.050|5.01|10.5|GX||Vir|3.8|1.7||
+NGC 5371|208.916|40.46|10.6|GX||CVn|4|2.5||
+NGC 5566|215.083|3.93|10.5|GX||Vir|5.4|2.1||
+NGC 5746|221.233|1.95|10.6|GX||Vir|7.2|1.1||
+NGC 5813|225.297|1.70|10.5|GX||Vir|4.1|2.7||
+NGC 584|22.836|-6.87|10.3|GX||Cet|3.8|2.5||
+NGC 5846|226.622|1.61|10.2|GX||Vir|4.3|4||
+NGC 5897|229.352|-21.01|8.5|GC||Lib|9.9|9.9||
+NGC 5907|228.974|56.33|10.4|GX||Dra|11.3|1.8||
+NGC 613|23.576|-29.42|10|GX||Scl|5.5|4.5||
+NGC 6210|251.123|23.80|9.7|PN||Her|0.5|0.5||
+NGC 6229|251.745|47.53|8.7|GC||Her|4.8|4.8||
+NGC 6235|253.356|-22.18|7.2|GC||Oph|4.2|4.2||
+NGC 6284|256.120|-24.76|7.4|GC||Oph|6.6|6.6||
+NGC 6309|258.518|-12.91|10.1|PN|Kastennebel|Oph|0.3|0.3||
+NGC 6356|260.896|-17.81|7.4|GC||Oph|5.4|5.4||
+NGC 6357|261.182|-34.20||EN|Krieg-und-Frieden-Nebel|Sco|3.9|3.9||
+NGC 6369|262.335|-23.76|11.4|PN|Kleiner Geisternebel|Oph|0.6|0.6||
+NGC 637|25.763|64.04|7.9|OC||Cas|4.5|4.5||
+NGC 6374|263.677|-32.58|4.9|OC||Sco|6.9|6.9||
+NGC 6425|266.757|-31.53|7.2|OC||Sco|4.8|4.8||
+NGC 6445|267.313|-20.01|11.2|PN|Kleines Juwel|Sgr|0.6|0.6||
+NGC 6503|267.360|70.14|10.1|GX||Dra|5.9|2||
+NGC 6520|270.851|-27.89|7.6|OC||Sgr|5.4|5.4||
+NGC 6526|271.026|-24.44||EN||Sgr|40|40||
+NGC 6537|271.305|-19.84|11.6|PN|Roter Spinnennebel|Sgr|0.2|0.2||
+NGC 654|25.998|61.88|6.5|OC||Cas|6.3|6.3||
+NGC 6543|269.639|66.63|9|PN|Katzenaugennebel|Dra|0.9|0.9||
+NGC 6546|271.844|-23.30|8|OC||Sgr|6.9|6.9||
+NGC 6553|272.323|-25.91|8.4|GC||Sgr|5.4|5.4||
+NGC 6559|272.487|-24.11||EN||Sgr|15|10||
+NGC 6563|273.010|-33.87|11|PN||Sgr|0.8|0.8||
+NGC 6567|273.438|-19.08|11|PN||Sgr|0.1|0.1||
+NGC 6572|273.026|6.85|8.1|PN||Oph|0.2|0.2||
+NGC 659|26.096|60.67|7.7|OC||Cas|4.2|4.2||
+NGC 6605|274.090|-15.02|6|OC||Ser|6.3|6.3||
+NGC 6629|276.427|-23.20|10.9|PN||Sgr|0.3|0.3||
+NGC 663|26.567|61.22|7.1|OC||Cas|6|6||
+NGC 6633|276.813|6.51|4.3|OC|Wolkenhaufen|Oph|12|12||
+NGC 6644|278.145|-25.13|10.7|PN||Sgr|0|0||
+NGC 6647|278.206|-17.23|8|OC||Sgr|3.6|3.6||
+NGC 6664|279.139|-8.22|7.8|OC||Sct|6|6||
+NGC 6709|282.829|10.32|6.5|OC||Aql|8.7|8.7||
+NGC 6716|283.643|-19.90|7|OC||Sgr|7.2|7.2||
+NGC 6741|285.654|-0.45|10.1|PN|Phantomstreifen-Nebel|Aql|0.1|0.1||
+NGC 6743|285.336|29.28|7.5|OC||Lyr|6.9|6.9||
+NGC 6755|286.954|4.27|7.5|OC||Aql|6|6||
+NGC 676|27.239|5.91|9.5|GX||Psc|2.8|0.7||
+NGC 6790|290.737|1.51|9.5|PN||Aql|0.1|0.1||
+NGC 6803|292.819|10.06|10.6|PN||Aql|0.1|0.1||
+NGC 6811|294.325|46.39|6.8|OC||Cyg|7.2|7.2||
+NGC 6818|295.991|-14.15|9.2|PN|Kleines Juwel|Sgr|0.8|0.8||
+NGC 6819|295.325|40.19|7.3|OC|Fuchskopfhaufen|Cyg|6.9|6.9||
+NGC 6820|295.617|23.09|14.3|EN||Vul|0.5|0.5||
+NGC 6822|296.241|-14.80|8.7|GX|Barnards Galaxie|Sgr|17.4|16.8||
+NGC 6826|296.200|50.53|9.3|PN|Blinkender Nebel|Cyg|0.4|0.4||
+NGC 6830|297.748|23.10|7.7|OC||Vul|4.2|4.2||
+NGC 6834|298.052|29.41|7.8|OC||Cyg|4.5|4.5||
+NGC 6847|299.158|30.21||EN||Cyg|10|10||
+NGC 6866|300.980|44.16|7.3|OC||Cyg|5.1|5.1||
+NGC 6871|301.498|35.78|4.7|OC||Cyg|9.3|9.3||
+NGC 6883|302.832|35.83|8|OC||Cyg|4.5|4.5||
+NGC 6884|302.599|46.46|10.9|PN||Cyg|0.1|0.1||
+NGC 6888|303.027|38.35|6.7|EN|Mondsichelnebel|Cyg|20|10||
+NGC 6891|303.787|12.70|10.5|PN||Del|0.2|0.2||
+NGC 6905|305.596|20.10|11.1|PN|Blauer-Blitz-Nebel|Del|0.7|0.7||
+NGC 6910|305.800|40.78|6.4|OC||Cyg|6.3|6.3||
+NGC 6914|306.180|42.48||RN||Cyg|3|3||
+NGC 6939|307.876|60.66|7.8|OC||Cep|12|12||
+NGC 6940|308.611|28.28|6.3|OC||Vul|10.8|10.8||
+NGC 6946|308.718|60.15|9.1|GX|Feuerwerksgalaxie|Cyg|11.4|10.8||
+NGC 6960|311.492|30.60|6.3|SNR|Cirrusnebel (West, Hexenbesen)|Cyg|70|6||
+NGC 6979|312.617|32.03||SNR||Cyg|7|3||
+NGC 6992|314.079|31.74|6.3|SNR|Cirrusnebel (Ost)|Cyg|60|8||
+NGC 6995|314.295|31.24|6.3|SNR|Cirrusnebel (Ost)|Cyg|12|12||
+NGC 7000|314.821|44.53|3.3|EN|Nordamerikanebel|Cyg|120|100||
+NGC 7008|315.137|54.54|10.7|PN||Cyg|1.4|1.4||
+NGC 7009|316.045|-11.36|7.6|PN|Saturnnebel|Aqr|0.7|0.5||
+NGC 7023|315.398|68.17|6.5|RN|Irisnebel|Cep|10|8||
+NGC 7026|316.577|47.85|10.9|PN||Cyg|0.3|0.3||
+NGC 7027|316.756|42.24|8.5|PN||Cyg|0.2|0.2||
+NGC 7039|317.699|45.62|7.4|OC||Cyg|7.8|7.8||
+NGC 7048|318.563|46.29|10.6|PN||Cyg|1|1||
+NGC 7063|321.090|36.49|6.6|OC||Cyg|6.3|6.3||
+NGC 7082|322.324|47.13|7|OC||Cyg|9|9||
+NGC 7129|325.746|66.11|10.8|RN||Cep|2.1|2.1||
+NGC 7160|328.418|62.60|5.6|OC||Cep|4.2|4.2||
+NGC 720|28.252|-13.74|10.1|GX||Cet|4.5|2.4||
+NGC 7209|331.283|46.48|7.5|OC||Lac|6|6||
+NGC 7217|331.968|31.36|10.3|GX||Peg|4.5|3.8||
+NGC 7234|333.104|57.27|7.7|OC||Cep|2.4|2.4||
+NGC 7243|333.786|49.90|5.8|OC||Lac|15|15||
+NGC 7293|337.411|-20.84|6.8|PN|Helixnebel|Aqr|16.3|16.3||
+NGC 7331|339.267|34.42|9.4|GX|Deer-Lick-Gruppe|Peg|9.3|3.8||
+NGC 7380|341.838|58.13|6.9|EN|Zauberernebel|Cep|25|20||
+NGC 744|29.625|55.47|7.7|OC||Per|11.7|11.7||
+NGC 7479|346.236|12.32|11|GX||Peg|3.6|2.7||
+NGC 7507|348.032|-28.54|10|GX||Scl|3.3|3.2||
+NGC 7510|347.766|60.57|7.9|OC||Cep|3.9|3.9||
+NGC 752|29.395|37.83|5.7|OC||And|39|39||
+NGC 7635|350.190|61.21|10.3|EN|Blasennebel|Cas|15|8||
+NGC 7662|351.475|42.53|8.3|PN|Blauer Schneeball|And|0.3|0.3||
+NGC 7686|352.531|49.13|5.6|OC||And|3.6|3.6||
+NGC 772|29.832|19.01|10|GX||Ari|4.6|2.5||
+NGC 7789|359.350|56.71|6.7|OC|Carolines Rose|Cas|14.4|14.4||
+NGC 7793|359.458|-32.59|9|GX||Scl|10.4|6||
+NGC 7814|0.812|16.15|10.6|GX||Peg|4.4|1.9||
+NGC 7822|0.897|67.16||EN|Fragezeichennebel|Cep|20|4||
+NGC 869/884|35.175|57.14||OC|h und χ Persei (Doppelhaufen)|Per|50|50||
+NGC 891|35.639|42.35|10|GX|Kantengalaxie|And|13|3||
+NGC 896|36.366|62.02||EN||Cas|10|10||
+NGC 908|35.769|-21.23|10.1|GX||Cet|6.1|2.8||
+NGC 925|36.820|33.58|9.9|GX||Tri|10.7|5.8||
+NGC 936|36.906|-1.16|10.2|GX||Cet|4.4|3.2||
+NGC 957|38.329|57.57|7.6|OC||Per|10.2|10.2||
+NGC 988|38.866|-9.36|10.2|GX||Cet|4.3|1.7||
+Sh2-101|301.800|35.28||EN|Tulpennebel|Cyg|16|9||
+Sh2-129|317.700|59.97||EN|Fliegende Fledermaus (sehr lichtschwach)|Cep|145|100||16.1
+Sh2-155|344.475|62.52||EN|Höhlennebel|Cep|50|30||
+Sh2-240|84.750|28.00||SNR|Spaghettinebel (sehr lichtschwach)|Tau|180|180||16.2
+UGC 4305|124.771|70.72|10.5|GX|Holmberg II|UMa|7.9|5.6||`;
 const CAT = CAT_RAW.trim().split("\n").map(l => {
   const p = l.split("|");
-  return { id:p[0], ra:+p[1]*15, dec:+p[2], mag:+p[3], t:p[4], name:p[5]||"", con:p[6], sb:+(p[7]||0) };
+  const o = { id:p[0], ra:+p[1], dec:+p[2], mag:p[3]===""?null:+p[3], t:p[4], name:p[5]||"", con:p[6],
+    maj:p[7]===""?null:+p[7], min:p[8]===""?null:+p[8], alias:p[9]||"", sbo:p[10]?+p[10]:null };
+  o.sbv = o.sbo ?? (o.mag===null ? (o.t==="DN"?15.8:14.5) : o.mag + 2.5*Math.log10(Math.max(0.785*(o.maj||1)*(o.min||o.maj||1),0.2)));
+  // Für Kameras: große HII-Regionen sind heller, als die Formel aus Gesamthelligkeit und Fläche ergibt
+  o.sbs = (!o.sbo && (o.t==="EN"||o.t==="SNR")) ? Math.min(o.sbv,15.0) : o.sbv;
+  o.key = (o.id+" "+o.name+" "+o.alias).toLowerCase().replace(/[\s\-–.,()]/g,"");
+  return o;
 });
 
-const TYPE = {GX:"Galaxie",GC:"Kugelsternhaufen",OC:"Offener Sternhaufen",EN:"Emissionsnebel",RN:"Reflexionsnebel",PN:"Planetarischer Nebel",SNR:"Supernova-Überrest",DS:"Doppelstern"};
-const GROUP = {GX:"gx",GC:"cl",OC:"cl",EN:"neb",RN:"neb",PN:"neb",SNR:"neb",DS:"ds"};
+const TYPE = {GX:"Galaxie",GC:"Kugelsternhaufen",OC:"Offener Sternhaufen",EN:"Emissionsnebel",RN:"Reflexionsnebel",PN:"Planetarischer Nebel",SNR:"Supernova-Überrest",DS:"Doppelstern",DN:"Dunkelnebel"};
+const GROUP = {GX:"gx",GC:"cl",OC:"cl",EN:"neb",RN:"neb",PN:"neb",SNR:"neb",DN:"neb",DS:"ds"};
 const GROUPS = [["gx","Galaxien"],["cl","Sternhaufen"],["neb","Nebel"],["ds","Doppelsterne"]];
 const GCOL = {gx:"var(--star)",cl:"var(--good)",neb:"var(--neb)",ds:"var(--ink)"};
-const DIFFUSE = new Set(["GX","EN","RN","SNR"]);
-const LIM = {eye:5.5,bino:8.5,s100:10.5,s150:11.5,s250:12.5};
-const EQNAME = {eye:"mit bloßem Auge",bino:"im Fernglas",s100:"in deinem Teleskop",s150:"in deinem Teleskop",s250:"in deinem Dobson"};
+const DIFFUSE = new Set(["GX","EN","RN","SNR","DN"]);
+const NARROW = new Set(["EN","SNR","PN","DN"]);   // profitieren vom Duoband-Filter
+const EQ = {
+  eye:  {kind:"vis", lim:5.5,  label:"mit bloßem Auge"},
+  bino: {kind:"vis", lim:8.5,  label:"im Fernglas"},
+  s100: {kind:"vis", lim:10.5, label:"in deinem Teleskop"},
+  s150: {kind:"vis", lim:11.5, label:"in deinem Teleskop"},
+  s250: {kind:"vis", lim:12.5, label:"in deinem Dobson"},
+  s50:  {kind:"smart", fov:[1.29,0.73], sbLim:15.2, name:"Seestar S50", label:"für dein Seestar S50"},
+  s30:  {kind:"smart", fov:[2.14,1.20], sbLim:14.6, name:"Seestar S30", label:"für dein Seestar S30"},
+  dmini:{kind:"smart", fov:[2.14,1.20], sbLim:14.6, name:"Dwarf mini", label:"für dein Dwarf mini"}
+};
 const DIRS = [["all","Alle",null],["N","N",0],["NO","NO",45],["O","O",90],["SO","SO",135],["S","S",180],["SW","SW",225],["W","W",270],["NW","NW",315]];
 const DIRWORD = {all:"ganzen Himmel",N:"Nordhimmel",NO:"Nordosthimmel",O:"Osthimmel",SO:"Südosthimmel",S:"Südhimmel",SW:"Südwesthimmel",W:"Westhimmel",NW:"Nordwesthimmel"};
 const AZNAME = ["N","NO","O","SO","S","SW","W","NW"];
@@ -607,8 +1025,19 @@ function aqAt(t){
 }
 
 /* ---------- Bewertung ---------- */
+function frameOf(o, eq){
+  if(!o.maj) return {f:0.9, txt:"Größe unbekannt"};
+  const a=o.maj/60, b=(o.min||o.maj)/60;
+  const fill=Math.max(a/eq.fov[0], b/eq.fov[1]);
+  if(fill<0.04) return {f:0.35, txt:"sehr klein im Bild"};
+  if(fill<0.15) return {f:0.8,  txt:"klein im Bild"};
+  if(fill<=1)   return {f:1,    txt:"passt gut ins Bild"};
+  if(fill<=1.5) return {f:0.85, txt:"füllt das Bild randvoll"};
+  return {f:0.6, txt:"größer als das Bildfeld, Mosaik nutzen"};
+}
 function evaluate(t){
   const L=loc(), lat=L.lat, lon=L.lon;
+  const eq=EQ[S.eq]||EQ.s150, smart=eq.kind==="smart";
   const sa=sunAlt(t,lat,lon);
   const mo=moonAltAz(t,lat,lon), ph=moonPhase(t);
   const night=nightFor(t,lat,lon);
@@ -619,21 +1048,43 @@ function evaluate(t){
   const objs=[];
   for(const o of CAT){
     const p=altAz(o.ra,o.dec,t,lat,lon);
-    const diffuse=DIFFUSE.has(o.t);
+    const diffuse=DIFFUSE.has(o.t), filt=smart&&NARROW.has(o.t);
     const ms = mo.alt>0 ? sep(o.ra,o.dec,mo.ra,mo.dec) : 180;
     let moonPen = diffuse ? moonBase : moonBase*0.45;
     if(mo.alt>0 && ms<20) moonPen += ph.k;
-    const lightPen = diffuse ? sqm : sqm*0.5;
-    const eff = LIM[S.eq] - darkPen - moonPen - lightPen;
-    const margin = eff - (o.mag + o.sb);
+    let lightPen = diffuse ? sqm : sqm*0.5;
+    if(filt){ moonPen*=0.35; lightPen*=0.35; }
+    let margin;
+    if(!smart){
+      if(o.sbv>=15.5) margin=-9;
+      else {
+        const pen = diffuse ? clamp((o.sbv-12.5)*0.8,0,4) : 0;
+        margin = eq.lim - darkPen - moonPen - lightPen - ((o.mag??9) + pen);
+      }
+    } else if(o.t==="OC"||o.t==="GC"||o.t==="DS"){
+      margin = 13.5 - (o.mag??9) - 0.5*(darkPen+moonPen+lightPen);
+    } else {
+      margin = eq.sbLim + (filt?1:0) - o.sbs - darkPen - moonPen - lightPen;
+    }
     let inDir = true;
     if(dirDef[2]!==null){ const dd=Math.abs(((p.az-dirDef[2]+540)%360)-180); inDir = dd<=45 || p.alt>=75; }
     const visible = p.alt>=S.minAlt && margin>=0;
     const altF = clamp((p.alt-10)/50);
-    const score = Math.round(100*(0.55*clamp(margin/3)+0.45*altF));
-    objs.push({o,alt:p.alt,az:p.az,margin,visible,inDir,score,moonSep:ms});
+    const x={o,alt:p.alt,az:p.az,margin,visible,inDir,moonSep:ms,filt};
+    if(smart){
+      x.frame=frameOf(o,eq);
+      let win=0;
+      if(margin>=0) for(let tt=night.w0; tt<night.w1; tt+=20*60000){ if(altAz(o.ra,o.dec,tt,lat,lon).alt>=S.minAlt) win+=1/3; }
+      x.win=win;
+      const zenF = p.alt>80 ? 0.75 : 1;
+      const attr = {OC:0.6, DS:0.45, GC:0.85}[o.t] ?? 1;   // Sternhaufen sind als Fotoziel weniger ergiebig
+      x.score = Math.round(100*(0.45*clamp(margin/3)+0.3*altF+0.25*clamp(win/4))*x.frame.f*zenF*attr);
+    } else {
+      x.score = Math.round(100*(0.55*clamp(margin/3)+0.45*altF));
+    }
+    objs.push(x);
   }
-  return {sa,mo,ph,night,objs,lat,lon};
+  return {sa,mo,ph,night,objs,lat,lon,eq,smart};
 }
 function bestTime(o, night, lat, lon){
   let bt=night.w0, ba=-99;
@@ -641,6 +1092,7 @@ function bestTime(o, night, lat, lon){
   return {t:bt, alt:ba};
 }
 function rateOf(x){ return x.margin>2.5?["leicht","easy"]:x.margin>1?["gut",""]:["anspruchsvoll",""]; }
+const sizeTxt = o => !o.maj ? "" : (o.min&&Math.abs(o.min-o.maj)>0.05 ? `${nf(o.maj,o.maj<10?1:0)}′ × ${nf(o.min,o.min<10?1:0)}′` : `${nf(o.maj,o.maj<10?1:0)}′`);
 
 /* ---------- Darstellung ---------- */
 function render(){
@@ -690,7 +1142,10 @@ function renderVerdict(E){
     sub = n.dusk ? `Astronomische Dunkelheit beginnt um ${hm(n.dusk)} Uhr.` : n.nDusk ? `Richtig dunkel wird es in dieser Nacht nicht. Am dunkelsten ist es gegen ${hm(n.minT)} Uhr.` : "In dieser Nacht wird es nicht dunkel genug.";
   } else {
     const cTxt = cAvg===null ? (WX?"Für diesen Zeitpunkt gibt es noch keine Wettervorhersage.":"Wetterdaten fehlen noch.") : `Die Modelle erwarten im Mittel ${nf(cAvg)} % Bewölkung${cSpread>40?", sind sich aber uneinig":""}.`;
-    sub = `${cTxt} ${list.length===0?"Kein Objekt":list.length===1?"Ein Objekt steht":list.length+" Objekte stehen"} ${EQNAME[S.eq]} hoch genug${list.length?" und hell genug":""}.`;
+    const eqd=EQ[S.eq]||EQ.s150;
+    sub = eqd.kind==="smart"
+      ? `${cTxt} ${list.length===0?"Kein Objekt lohnt":list.length===1?"Ein Objekt lohnt":list.length+" Objekte lohnen"} sich gerade ${eqd.label}.`
+      : `${cTxt} ${list.length===0?"Kein Objekt steht":list.length===1?"Ein Objekt steht":list.length+" Objekte stehen"} ${eqd.label} hoch genug${list.length?" und hell genug":""}.`;
   }
 
   // Kennzahlen
@@ -917,23 +1372,54 @@ function renderWx(){
   $("#wx").innerHTML=`<table><thead><tr><th>${hm(T)} Uhr</th>${ms.map(m=>`<th>${esc(m.label)}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td>${ms.map(m=>`<td>${r[1](m.v)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
 }
 
+let Q="";
+function whyNot(x){
+  if(x.alt<0) return "unter dem Horizont";
+  if(x.alt<S.minAlt) return "noch zu niedrig";
+  if(x.margin<0) return "zu lichtschwach";
+  if(!x.inDir) return "andere Richtung";
+  return "";
+}
 function renderObjs(E){
-  const list=listed(E);
+  let list;
+  if(Q){
+    const q=Q.toLowerCase().replace(/[\s\-–.,()]/g,"");
+    list=E.objs.filter(x=>x.o.key.includes(q)).sort((a,b)=>(b.visible-a.visible)||(b.score-a.score));
+    if(!list.length){ $("#objs").innerHTML=`<li class="empty" style="border:1px dashed var(--line)">Kein Objekt passt zu „${esc(Q)}“. Suche nach Katalognummer wie M 51, NGC 7000 oder einem Namen wie Herznebel.</li>`; $("#objMore").innerHTML=""; return; }
+  } else list=listed(E);
   if(!list.length){
     const hint = E.sa>-12 ? "Es ist noch zu hell. Wähle eine spätere Uhrzeit oder tippe auf „Ende der Dämmerung“." : "In dieser Richtung steht gerade nichts hoch und hell genug. Senke die Mindesthöhe, wähle „Alle“ oder eine andere Uhrzeit.";
     $("#objs").innerHTML=`<li class="empty" style="border:1px dashed var(--line)">${hint}</li>`; $("#objMore").innerHTML=""; return;
   }
   const n=showAll?list.length:Math.min(20,list.length);
   $("#objs").innerHTML=list.slice(0,n).map(x=>{
-    const o=x.o, [rt,rc]=rateOf(x), open=openId===o.id;
+    const o=x.o, [rt,rc]=rateOf(x), open=openId===o.id, why=whyNot(x);
+    const sz=sizeTxt(o);
+    let meta;
+    if(E.smart) meta=`${TYPE[o.t]} in ${o.con}${sz?`, ${sz}`:""}, ${x.frame.txt}`;
+    else meta=`${TYPE[o.t]} in ${o.con}${o.mag!==null?`, ${nf(o.mag,1)} mag`:""}${sz?`, ${sz}`:""}`;
     let detail="";
     if(open){
       const b=bestTime(o,E.night,E.lat,E.lon);
-      detail=`<div class="more">${E.night.wType==="none"?"In dieser Nacht wird es nicht richtig dunkel. ":""}Am höchsten in der dunklen Phase um ${hm(b.t)} Uhr mit ${nf(b.alt)}°. ${E.mo.alt>0?`Abstand zum Mond ${nf(x.moonSep)}°. `:""}Gesamthelligkeit ${nf(o.mag,1)} mag${o.sb?", wirkt wegen großer Ausdehnung aber schwächer":""}.</div>`;
+      const parts=[];
+      if(E.night.wType==="none") parts.push("In dieser Nacht wird es nicht richtig dunkel.");
+      if(o.alias) parts.push(`Auch bekannt als ${o.alias}.`);
+      parts.push(`Am höchsten in der dunklen Phase um ${hm(b.t)} Uhr mit ${nf(b.alt)}°.`);
+      if(E.smart){
+        if(x.win!==undefined && x.margin>=0) parts.push(x.win>0?`Über ${S.minAlt}° steht es in der dunklen Phase etwa ${nf(x.win,1)} Stunden lang.`:`In der dunklen Phase kommt es nicht über ${S.minAlt}°.`);
+        parts.push(x.filt?"Duoband-Filter einschalten, das hebt den Nebel hervor und dämpft Mond und Lichtverschmutzung.":"Ohne Schmalbandfilter aufnehmen, ein Duoband-Filter würde hier Licht wegnehmen.");
+        if(x.margin>=0) parts.push(x.margin>2.5?"Schon 30 Minuten Belichtung geben ein gutes Bild.":x.margin>1?"Plane 1 bis 2 Stunden Belichtung ein.":"Braucht mehrere Stunden, am besten über mehrere Nächte gesammelt.");
+        if(x.alt>80) parts.push("Es steht gerade fast im Zenit. Im Alt-Az-Modus kann die Nachführung dort schwierig werden, besser etwas warten.");
+      } else {
+        if(o.mag!==null) parts.push(`Gesamthelligkeit ${nf(o.mag,1)} mag${DIFFUSE.has(o.t)&&o.sbv>13.5?", wirkt wegen großer Fläche aber deutlich schwächer":""}.`);
+        if(o.sbv>=15.5) parts.push("Visuell kaum zu sehen, das ist ein Ziel für die Kamera.");
+      }
+      if(E.mo.alt>0) parts.push(`Abstand zum Mond ${nf(x.moonSep)}°.`);
+      detail=`<div class="more">${parts.join(" ")}</div>`;
     }
     return `<li><button class="o${open?" open":""}" data-id="${esc(o.id)}" aria-expanded="${open}">
-      <span><span class="nm">${esc(o.id)}${o.name?`<small>${esc(o.name)}</small>`:""}</span><br><span class="meta">${TYPE[o.t]} in ${o.con}, ${nf(o.mag,1)} mag<span class="rate ${rc}">${rt}</span></span></span>
-      <span class="pos">${nf(x.alt)}°<small>im ${azName(x.az)}</small></span></button>${detail}</li>`;
+      <span><span class="nm">${esc(o.id)}${o.name?`<small>${esc(o.name)}</small>`:""}</span><br><span class="meta">${esc(meta)}${why?"":`<span class="rate ${rc}">${rt}</span>`}</span></span>
+      <span class="pos">${nf(x.alt)}°<small>${why?esc(why):`im ${azName(x.az)}`}</small></span></button>${detail}</li>`;
   }).join("");
   $("#objMore").innerHTML = list.length>20 ? `<button class="chip" id="moreBtn">${showAll?"Weniger anzeigen":`Alle ${list.length} anzeigen`}</button>` : "";
   const mb=$("#moreBtn"); if(mb) mb.onclick=()=>{showAll=!showAll; render();};
@@ -1014,6 +1500,7 @@ $("#types").onclick=e=>{ const b=e.target.closest("[data-type]"); if(b){ S.types
 $("#eq").onchange=e=>{ S.eq=e.target.value; save(); render(); };
 $("#sqm").onchange=e=>{ S.sqm=e.target.value; save(); render(); };
 $("#minAlt").oninput=e=>{ S.minAlt=+e.target.value; save(); render(); };
+$("#q").oninput=e=>{ Q=e.target.value.trim(); showAll=false; render(); };
 $("#objs").onclick=e=>{ const b=e.target.closest("[data-id]"); if(b){ openId = openId===b.dataset.id?null:b.dataset.id; render(); } };
 $("#dome").onclick=e=>{
   const g=e.target.closest(".obj"); if(!g) return;
