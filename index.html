@@ -239,6 +239,9 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   <h2>Wetter im Detail</h2>
   <div class="tblwrap" id="wx"></div>
 
+  <h2>Kometen</h2>
+  <div id="comets"></div>
+
   <h2>Lohnende Objekte</h2>
   <input type="search" id="q" placeholder="Objekt suchen, z. B. M 51, NGC 7000 oder Herznebel" aria-label="Objekt suchen" style="width:100%;margin-bottom:10px">
   <div class="filters" id="types"></div>
@@ -249,7 +252,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   <div class="links" id="links"></div>
 
   <footer>
-    Wetterdaten: Open-Meteo (Modelle DWD ICON, ECMWF IFS, NOAA GFS), Aerosol-Daten: Copernicus CAMS über Open-Meteo, Seeing und Transparenz werden aus Höhenwinden, Windscherung, Luftfeuchte, hohen Wolken und Aerosolen geschätzt; 7Timer dient als Vergleich. Objektkatalog: Auswahl aus <a href="https://github.com/mattiaverga/OpenNGC" style="color:inherit">OpenNGC</a> von Mattia Verga (CC BY-SA 4.0), ergänzt um einige Sharpless-Objekte. Positionen von Sonne, Mond und Objekten werden im Gerät berechnet (Genauigkeit etwa ein Grad).
+    Wetterdaten: Open-Meteo (Modelle DWD ICON, ECMWF IFS, NOAA GFS), Aerosol-Daten: Copernicus CAMS über Open-Meteo, Seeing und Transparenz werden aus Höhenwinden, Windscherung, Luftfeuchte, hohen Wolken und Aerosolen geschätzt; 7Timer dient als Vergleich. Objektkatalog: Auswahl aus <a href="https://github.com/mattiaverga/OpenNGC" style="color:inherit">OpenNGC</a> von Mattia Verga (CC BY-SA 4.0), ergänzt um einige Sharpless-Objekte. Kometen-Bahndaten: Minor Planet Center (IAU). Positionen von Sonne, Mond und Objekten werden im Gerät berechnet (Genauigkeit etwa ein Grad).
   </footer>
 </main>
 
@@ -1184,7 +1187,8 @@ function render(){
   $("#types").innerHTML=GROUPS.map(g=>`<button class="chip" data-type="${g[0]}" aria-pressed="${S.types[g[0]]}"><i class="dot" style="background:${GCOL[g[0]]}"></i>${g[1]}</button>`).join("");
   if(!L) return;
   const E=evaluate(T);
-  renderVerdict(E); renderOutlook(); renderDome(E); renderTimeline(E); renderWx(); renderObjs(E); renderLinks();
+  renderVerdict(E); renderOutlook(); const CL=cometsAt(E);
+  renderDome(E,CL); renderTimeline(E); renderWx(); renderComets(E,CL); renderObjs(E); renderLinks();
 }
 
 function listed(E){
@@ -1376,7 +1380,92 @@ function renderOutlook(){
   el.innerHTML=tip+`<ul class="nights">${rows}</ul>`;
 }
 
-function renderDome(E){
+/* ---------- Kometen (Bahndaten vom Minor Planet Center, täglich per GitHub Action) ---------- */
+let COMETS=null, cometMsg="", openCid=null;
+async function loadComets(){
+  if(location.protocol==="file:"){ cometMsg="Kometen erscheinen in der Version auf GitHub Pages, denn nur dort werden die Bahndaten täglich aktualisiert."; render(); return; }
+  try{ COMETS=await getJSON("comets.json?v="+Math.floor(Date.now()/3600000)); cometMsg=""; }
+  catch(e){ COMETS=null; cometMsg="Noch keine Kometendaten. Die GitHub-Action legt die Datei comets.json bei ihrem ersten Lauf an."; }
+  render();
+}
+const KG=0.01720209895, EPS0=23.4392911*D;
+function cometHelio(c, j){
+  const q=c.q, e=c.e, dt=j-c.T; let r, nu;
+  if(e<0.999999){
+    const a=q/(1-e), n=KG/Math.pow(a,1.5);
+    let M=(n*dt)%(2*Math.PI); if(M>Math.PI) M-=2*Math.PI; if(M<-Math.PI) M+=2*Math.PI;
+    let E = e>0.8 ? M+0.85*e*Math.sign(Math.sin(M)||1) : M;
+    for(let k=0;k<100;k++){ const dE=(E-e*Math.sin(E)-M)/(1-e*Math.cos(E)); E-=dE; if(Math.abs(dE)<1e-12) break; }
+    r=a*(1-e*Math.cos(E)); nu=2*Math.atan2(Math.sqrt(1+e)*Math.sin(E/2), Math.sqrt(1-e)*Math.cos(E/2));
+  } else if(e<=1.000001){
+    const W=3*KG/Math.sqrt(2*q*q*q)*dt, Y=Math.cbrt(W/2+Math.sqrt(W*W/4+1)), s=Y-1/Y;
+    nu=2*Math.atan(s); r=q*(1+s*s);
+  } else {
+    const a=q/(e-1), N=KG*dt/Math.pow(a,1.5); let H=Math.asinh(N/e);
+    for(let k=0;k<100;k++){ const dH=(e*Math.sinh(H)-H-N)/(e*Math.cosh(H)-1); H-=dH; if(Math.abs(dH)<1e-12) break; }
+    r=a*(e*Math.cosh(H)-1); nu=2*Math.atan(Math.sqrt((e+1)/(e-1))*Math.tanh(H/2));
+  }
+  const w=c.w*D, O=c.node*D, i=c.i*D, u=w+nu;
+  return {x:r*(Math.cos(O)*Math.cos(u)-Math.sin(O)*Math.sin(u)*Math.cos(i)),
+          y:r*(Math.sin(O)*Math.cos(u)+Math.cos(O)*Math.sin(u)*Math.cos(i)),
+          z:r*Math.sin(u)*Math.sin(i), r};
+}
+function cometObs(c, j){
+  const p=cometHelio(c,j), n=j-2451545;
+  const g=norm(357.528+0.9856003*n)*D;
+  const lam=(norm(280.460+0.9856474*n)+1.915*Math.sin(g)+0.020*Math.sin(2*g)-1.397*n/36525)*D;
+  const R=1.00014-0.01671*Math.cos(g)-0.00014*Math.cos(2*g);
+  const sx=R*Math.cos(lam), sy=R*Math.sin(lam);
+  const X=p.x+sx, Y=p.y+sy, Z=p.z, delta=Math.hypot(X,Y,Z);
+  const ye=Y*Math.cos(EPS0)-Z*Math.sin(EPS0), ze=Y*Math.sin(EPS0)+Z*Math.cos(EPS0);
+  const elong=Math.acos(clamp((X*sx+Y*sy)/(delta*R),-1,1))/D;
+  return {ra:norm(Math.atan2(ye,X)/D), dec:Math.asin(ze/delta)/D, mag:c.H+5*Math.log10(delta)+2.5*c.G*Math.log10(p.r), r:p.r, delta, elong};
+}
+function cometsAt(E){
+  if(!COMETS||!Array.isArray(COMETS.comets)) return [];
+  const j=jd(T), eq=EQ[S.eq]||EQ.s150, smart=eq.kind==="smart";
+  const darkPen = E.sa<=-18?0 : E.sa<=-15?0.7 : E.sa<=-12?1.5 : E.sa<=-9?3 : 6;
+  const moonBase = E.mo.alt>0 ? 2.2*E.ph.k*(E.mo.alt>15?1:0.7) : 0;
+  const pens = darkPen+moonBase+(+S.sqm);
+  const out=[];
+  for(const c of COMETS.comets){
+    let ob; try{ ob=cometObs(c,j); }catch(e){ continue; }
+    if(!isFinite(ob.mag)||ob.mag>14.5) continue;
+    const p=altAz(ob.ra,ob.dec,T,E.lat,E.lon);
+    const margin = smart ? 13-0.6*pens-ob.mag : eq.lim-pens-1-ob.mag;   // Kometen sind flächig: 1 mag Zuschlag
+    out.push({c,...ob,alt:p.alt,az:p.az,margin,visible:p.alt>=S.minAlt&&margin>=0});
+  }
+  return out.sort((a,b)=>a.mag-b.mag);
+}
+function cometName(c){ const m=c.name.match(/^(.*?)\s*\((.*)\)\s*$/); return m?[m[1],m[2]]:[c.name,""]; }
+function renderComets(E, CL){
+  const el=$("#comets");
+  if(!COMETS){ el.innerHTML=`<p class="empty">${esc(cometMsg||"Kometendaten werden geladen …")}</p>`; return; }
+  const stand=new Date(COMETS.updated).toLocaleDateString("de-DE",{day:"numeric",month:"long"});
+  const note=`<p class="small muted" style="margin:8px 0 0">Bahndaten vom Minor Planet Center, Stand ${esc(stand)}. Die Helligkeiten sind Vorhersagen, echte Kometen weichen oft ein bis zwei Größenklassen davon ab. Aktuelle Beobachtungen findest du bei <a href="https://cobs.si/" target="_blank" rel="noopener" style="color:inherit">COBS</a>.</p>`;
+  if(!CL.length){ el.innerHTML=`<p class="empty">Zurzeit ist kein Komet heller als etwa 14 mag.</p>`+note; return; }
+  el.innerHTML=`<ul class="objs">${CL.map(x=>{
+    const [id,nm]=cometName(x.c), open=openCid===x.c.name, [rt,rc]=rateOf(x);
+    const why = x.alt<0?"unter dem Horizont":x.alt<S.minAlt?"noch zu niedrig":x.margin<0?"zu lichtschwach":"";
+    let detail="";
+    if(open){
+      // Kometen nah an der Sonne: auch die Dämmerung mit einbeziehen (Sonne tiefer als 8°)
+      const n0=E.night.sunset||E.night.start, n1=E.night.sunrise||E.night.end; let bt=null, ba=-99;
+      for(let t=n0;t<=n1;t+=10*60000){ if(sunAlt(t,E.lat,E.lon)>-8) continue; const a=altAz(x.ra,x.dec,t,E.lat,E.lon).alt; if(a>ba){ba=a;bt=t;} }
+      const twi = bt && sunAlt(bt,E.lat,E.lon)>-18;
+      const parts=[ bt&&ba>0 ? `Am besten um ${hm(bt)} Uhr, dann steht er ${nf(ba)}° hoch${twi?" in der Dämmerung":" bei dunklem Himmel"}.` : "Er kommt in dieser Nacht bei dunklem Himmel nicht über den Horizont.",
+        `Abstand zur Sonne am Himmel ${nf(x.elong)}°${x.elong<30?", daher nur kurz nach Sonnenuntergang oder vor Sonnenaufgang zu sehen":""}.`,
+        `Entfernung zur Sonne ${nf(x.r,2)} AE, zur Erde ${nf(x.delta,2)} AE.`];
+      if(E.smart) parts.push("Kometen bewegen sich vor den Sternen. Kurze Einzelbelichtungen und eine begrenzte Gesamtzeit halten den Kern scharf.");
+      detail=`<div class="more">${parts.join(" ")}</div>`;
+    }
+    return `<li><button class="o${open?" open":""}" data-cid="${esc(x.c.name)}" aria-expanded="${open}">
+      <span><span class="nm">${esc(id)}${nm?`<small>${esc(nm)}</small>`:""}</span><br><span class="meta">Komet, etwa ${nf(x.mag,1)} mag${why?"":`<span class="rate ${rc}">${rt}</span>`}</span></span>
+      <span class="pos">${nf(x.alt)}°<small>${why?esc(why):`im ${azName(x.az)}`}</small></span></button>${detail}</li>`;
+  }).join("")}</ul>`+note;
+}
+
+function renderDome(E, CL=[]){
   const R=148, c=170;
   const pt=(alt,az)=>{ const r=(90-alt)/90*R; return [c-r*Math.sin(az*D), c-r*Math.cos(az*D)]; };
   let s=`<circle class="hor" cx="${c}" cy="${c}" r="${R}"/>`;
@@ -1400,6 +1489,13 @@ function renderDome(E){
     s+=`<g class="obj" data-id="${esc(x.o.id)}" opacity="${dim}"><circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${(sel?r+3:r).toFixed(1)}" fill="${GCOL[GROUP[x.o.t]]}" ${sel?'stroke="var(--ink)" stroke-width="2"':""}/>`;
     if(top.has(x.o.id)||sel) s+=`<text class="lbl" x="${(px+r+3).toFixed(1)}" y="${(py+4).toFixed(1)}">${esc(x.o.id.replace("NGC ","N"))}</text>`;
     s+=`</g>`;
+  }
+  const sun=sunPos(T), sp=altAz(sun.ra,sun.dec,T,E.lat,E.lon), [sx,sy]=pt(sp.alt,sp.az);
+  for(const x of CL){
+    if(x.alt<=0||x.margin<0) continue;
+    const [cx2,cy2]=pt(x.alt,x.az); let dx=cx2-sx, dy=cy2-sy; const l=Math.hypot(dx,dy)||1; dx/=l; dy/=l;
+    const op=x.alt<S.minAlt?.35:1;
+    s+=`<g opacity="${op}"><line x1="${cx2.toFixed(1)}" y1="${cy2.toFixed(1)}" x2="${(cx2+dx*16).toFixed(1)}" y2="${(cy2+dy*16).toFixed(1)}" stroke="var(--good)" stroke-width="2.5" stroke-linecap="round" opacity=".6"/><circle cx="${cx2.toFixed(1)}" cy="${cy2.toFixed(1)}" r="4" fill="var(--good)"/><text class="lbl" x="${(cx2>230?cx2-7:cx2+7).toFixed(1)}" y="${(cy2-9).toFixed(1)}" text-anchor="${cx2>230?"end":"start"}">${esc(cometName(x.c)[0])}</text></g>`;
   }
   if(E.mo.alt>0){
     const [mx,my]=pt(E.mo.alt,E.mo.az);
@@ -1591,6 +1687,7 @@ $("#eq").onchange=e=>{ S.eq=e.target.value; save(); render(); };
 $("#sqm").onchange=e=>{ S.sqm=e.target.value; save(); render(); };
 $("#minAlt").oninput=e=>{ S.minAlt=+e.target.value; save(); render(); };
 $("#q").oninput=e=>{ Q=e.target.value.trim(); showAll=false; render(); };
+$("#comets").onclick=e=>{ const b=e.target.closest("[data-cid]"); if(b){ openCid = openCid===b.dataset.cid?null:b.dataset.cid; render(); } };
 $("#objs").onclick=e=>{ const b=e.target.closest("[data-id]"); if(b){ openId = openId===b.dataset.id?null:b.dataset.id; render(); } };
 $("#dome").onclick=e=>{
   const g=e.target.closest(".obj"); if(!g) return;
@@ -1605,7 +1702,7 @@ $("#tl").onclick=e=>{ const b=e.target.closest("[data-t]"); if(b){ T=+b.dataset.
   const L=loc(); const now=Date.now();
   if(sunAlt(now,L.lat,L.lon)>-12){ const n=nightFor(now,L.lat,L.lon); T=(n.dusk||n.nDusk||n.minT); if(T<now) T=now; }
   T=Math.round(T/300000)*300000;
-  render(); loadWeather();
+  render(); loadWeather(); loadComets();
 })();
 </script>
 </body>
