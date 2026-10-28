@@ -1590,7 +1590,9 @@ const SKY_SRC=[
 ];
 const SKY_NAME=["CDS Straßburg","CDS Straßburg (Ersatzserver)","NASA SkyView"];
 const skyGood=new Map();   // Objekt-Schlüssel -> Index der Quelle, die zuletzt funktioniert hat
-let skyPref=0;             // nach einem Ausfall gleich mit der funktionierenden Quelle beginnen
+// Die zuletzt funktionierende Quelle wird gespeichert, damit beim nächsten Start nicht erst gewartet wird.
+// Einmal am Tag versucht die App trotzdem wieder Straßburg, falls der Server dort wieder erreichbar ist.
+let skyPref = (S.skyPref && S.skyPrefAt && Date.now()-S.skyPrefAt < 86400000) ? S.skyPref : 0;
 // Abdunkeln und Kontrast der Himmelsfotos, per Regler einstellbar; im Rotlicht-Modus zusätzlich rot eingefärbt.
 function skyFilter(){
   const t=(S.skyAdj??55)/100;
@@ -1603,7 +1605,8 @@ function skyLoadText(img, txt){ const l=img.parentNode&&img.parentNode.querySele
 function skyOk(img){
   clearTimeout(img._t);
   const l=img.parentNode&&img.parentNode.querySelector(".load"); if(l) l.remove();
-  const i=+img.dataset.i; skyGood.set(img.dataset.key,i); skyPref=i;
+  const i=+img.dataset.i; skyGood.set(img.dataset.key,i);
+  if(i!==skyPref || S.skyPref!==i){ skyPref=i; S.skyPref=i; S.skyPrefAt=Date.now(); save(); }
   const c=img.closest(".fov").querySelector(".src"); if(c) c.textContent=SKY_NAME[i];
 }
 function skyFail(img){
@@ -1617,7 +1620,8 @@ function skyFail(img){
   skyLoadText(img,"Das Himmelsfoto konnte nicht geladen werden.<br>Keiner der Bildserver ist von deinem Gerät aus erreichbar.");
   img.remove();
 }
-function skyArm(img){ clearTimeout(img._t); img._t=setTimeout(()=>{ if(!(img.complete&&img.naturalWidth)) skyFail(img); },12000); }
+function skyArm(img){ clearTimeout(img._t); const ms = (+img.dataset.i<2 && S.skyPref===2) ? 6000 : 12000;
+  img._t=setTimeout(()=>{ if(!(img.complete&&img.naturalWidth)) skyFail(img); },ms); }
 function skyArmAll(){ document.querySelectorAll(".fov img.sky").forEach(img=>{ if(!(img.complete&&img.naturalWidth)) skyArm(img); }); }
 function fovPreview(o, E){
   const eq=E.eq, smart=E.smart, W=600, H=400;
@@ -1803,7 +1807,7 @@ $("#outlook").onclick=e=>{ const b=e.target.closest("[data-jump]"); if(b){ T=+b.
 $("#tl").onclick=e=>{ const b=e.target.closest("[data-t]"); if(b){ T=+b.dataset.t; render(); } };
 
 /* ---------- Start ---------- */
-const APP_VERSION="28.10.2026, 3";
+const APP_VERSION="28.10.2026, 4";
 (function init(){
   $("#appVer").textContent=APP_VERSION;
   const L=loc(); const now=Date.now();
