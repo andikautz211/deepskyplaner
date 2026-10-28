@@ -138,6 +138,14 @@ thead th{font-weight:700;color:var(--ink)}
 .rate.easy{border-color:var(--good);color:var(--good)}
 .o.open{background:var(--panel)}
 .more{padding:2px 2px 14px;font-size:.9rem;color:var(--muted)}
+.fov{margin:4px 0 16px}
+.fov .frame{position:relative;width:100%;aspect-ratio:3/2;background:var(--panel2);border-radius:10px;overflow:hidden}
+.fov img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.fov svg{position:absolute;inset:0;width:100%;height:100%}
+.fov .load{position:absolute;inset:0;display:grid;place-items:center;font-size:.85rem;color:var(--muted);text-align:center;padding:12px}
+.fov figcaption{font-size:.85rem;color:var(--muted);margin-top:6px}
+.fov .row{margin-top:6px}
+html.red .fov img{filter:grayscale(1) sepia(1) saturate(5) hue-rotate(-45deg) brightness(.65)}
 .empty{padding:18px;border:1px dashed var(--line);border-radius:12px;color:var(--muted)}
 
 /* Quellen */
@@ -252,7 +260,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   <div class="links" id="links"></div>
 
   <footer>
-    Wetterdaten: Open-Meteo (Modelle DWD ICON, ECMWF IFS, NOAA GFS), Aerosol-Daten: Copernicus CAMS über Open-Meteo, Seeing und Transparenz werden aus Höhenwinden, Windscherung, Luftfeuchte, hohen Wolken und Aerosolen geschätzt; 7Timer dient als Vergleich. Objektkatalog: Auswahl aus <a href="https://github.com/mattiaverga/OpenNGC" style="color:inherit">OpenNGC</a> von Mattia Verga (CC BY-SA 4.0), ergänzt um einige Sharpless-Objekte. Kometen-Bahndaten: Minor Planet Center (IAU). Positionen von Sonne, Mond und Objekten werden im Gerät berechnet (Genauigkeit etwa ein Grad).
+    Wetterdaten: Open-Meteo (Modelle DWD ICON, ECMWF IFS, NOAA GFS), Aerosol-Daten: Copernicus CAMS über Open-Meteo, Seeing und Transparenz werden aus Höhenwinden, Windscherung, Luftfeuchte, hohen Wolken und Aerosolen geschätzt; 7Timer dient als Vergleich. Objektkatalog: Auswahl aus <a href="https://github.com/mattiaverga/OpenNGC" style="color:inherit">OpenNGC</a> von Mattia Verga (CC BY-SA 4.0), ergänzt um einige Sharpless-Objekte. Kometen-Bahndaten: Minor Planet Center (IAU). Himmelsfotos: Digitized Sky Survey (DSS2) über den hips2fits-Dienst des CDS Straßburg. Positionen von Sonne, Mond und Objekten werden im Gerät berechnet (Genauigkeit etwa ein Grad).
   </footer>
 </main>
 
@@ -1558,7 +1566,55 @@ function renderWx(){
   $("#wx").innerHTML=`<table><thead><tr><th>${hm(T)} Uhr</th>${ms.map(m=>`<th>${esc(m.label)}</th>`).join("")}</tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td>${ms.map(m=>`<td>${r[1](m.v)}</td>`).join("")}</tr>`).join("")}${seeRow}</tbody></table>`;
 }
 
-let Q="";
+let Q="", ROT=false;
+/* ---------- Bildfeld-Vorschau: echtes Himmelsfoto (DSS2) über den hips2fits-Dienst des CDS Straßburg ---------- */
+function mosaicOf(o, eq, rot){
+  if(!o.maj) return {nx:1,ny:1};
+  const fw=rot?eq.fov[1]:eq.fov[0], fh=rot?eq.fov[0]:eq.fov[1];
+  const a=o.maj/60, b=(o.min||o.maj)/60, ov=0.85;            // 15 % Überlappung je Feld
+  const cnt=(w,h)=>({nx:Math.max(1,Math.ceil((w-fw)/(fw*ov)+1-1e-9)), ny:Math.max(1,Math.ceil((h-fh)/(fh*ov)+1-1e-9))});
+  const A=cnt(a,b), B=cnt(b,a);
+  return A.nx*A.ny<=B.nx*B.ny ? A : B;
+}
+function fovPreview(o, E){
+  const eq=E.eq, smart=E.smart, W=600, H=400;
+  const objDeg=(o.maj||10)/60;
+  let mz=null, imgW;
+  if(smart){
+    mz=mosaicOf(o,eq,ROT);
+    const fw=ROT?eq.fov[1]:eq.fov[0], fh=ROT?eq.fov[0]:eq.fov[1];
+    const mw=fw*(1+0.85*(mz.nx-1)), mh=fh*(1+0.85*(mz.ny-1));
+    imgW=Math.max(mw*1.35, mh*1.35*1.5, objDeg*1.3, eq.fov[0]*1.6);
+    mz.fw=fw; mz.fh=fh; mz.mw=mw; mz.mh=mh;
+  } else imgW=Math.max(objDeg*2.2, 0.5);
+  imgW=Math.min(imgW, 20);
+  const url=`https://alasky.cds.unistra.fr/hips-image-services/hips2fits?hips=${encodeURIComponent("CDS/P/DSS2/color")}&width=${W}&height=${H}&fov=${imgW.toFixed(4)}&projection=TAN&coordsys=icrs&ra=${o.ra.toFixed(4)}&dec=${o.dec.toFixed(4)}&format=jpg`;
+  let svg="", cap;
+  const k=W/imgW;
+  if(smart){
+    const fw=mz.fw*k, fh=mz.fh*k, mw=mz.mw*k, mh=mz.mh*k, x0=(W-mw)/2, y0=(H-mh)/2;
+    if(mz.nx*mz.ny>1){
+      for(let i=0;i<mz.nx;i++) for(let j=0;j<mz.ny;j++){
+        const x=x0+i*fw*0.85, y=y0+j*fh*0.85;
+        svg+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${fw.toFixed(1)}" height="${fh.toFixed(1)}" fill="none" stroke="var(--star)" stroke-width="1.2" stroke-dasharray="5 4" opacity=".75"/>`;
+      }
+    }
+    svg+=`<rect x="${x0.toFixed(1)}" y="${y0.toFixed(1)}" width="${mw.toFixed(1)}" height="${mh.toFixed(1)}" fill="none" stroke="var(--star)" stroke-width="2"/>`;
+    const fovTxt=`${nf(eq.fov[0],2)}° × ${nf(eq.fov[1],2)}°`;
+    cap = mz.nx*mz.ny>1
+      ? `Der Rahmen zeigt ein Mosaik aus ${mz.nx} × ${mz.ny} Feldern deines ${eq.name} (je ${fovTxt}). So passt das ganze Objekt aufs Bild.`
+      : `Der Rahmen zeigt das Bildfeld deines ${eq.name} (${fovTxt}).`;
+    cap+=" Im Alt-Az-Modus dreht sich der Ausschnitt im Lauf der Nacht etwas gegen den Himmel.";
+  } else {
+    cap=`Ausschnitt von etwa ${nf(imgW,imgW<2?1:0)}° Breite. Auf dem Foto wirkt das Objekt deutlich heller und farbiger als im Okular.`;
+  }
+  svg+=`<text x="10" y="24" fill="#fff" font-size="18" opacity=".85">N ↑  O ←</text>`;
+  return `<figure class="fov"><div class="frame"><div class="load">Himmelsfoto wird geladen …</div>
+    <img class="sky" src="${url}" alt="Himmelsfoto rund um ${esc(o.id)}" loading="lazy" onload="this.previousElementSibling.remove()" onerror="this.previousElementSibling.textContent='Das Himmelsfoto konnte nicht geladen werden.';this.remove()">
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${svg}</svg></div>
+    <figcaption>${esc(cap)} Foto: Digitized Sky Survey über CDS Straßburg.</figcaption>
+    ${smart?`<div class="row"><button class="chip" data-rot="1">Rahmen um 90° drehen</button></div>`:""}</figure>`;
+}
 function whyNot(x){
   if(x.alt<0) return "unter dem Horizont";
   if(x.alt<S.minAlt) return "noch zu niedrig";
@@ -1601,7 +1657,7 @@ function renderObjs(E){
         if(o.sbv>=15.5) parts.push("Visuell kaum zu sehen, das ist ein Ziel für die Kamera.");
       }
       if(E.mo.alt>0) parts.push(`Abstand zum Mond ${nf(x.moonSep)}°.`);
-      detail=`<div class="more">${parts.join(" ")}</div>`;
+      detail=`<div class="more">${parts.join(" ")}</div>${fovPreview(o,E)}`;
     }
     return `<li><button class="o${open?" open":""}" data-id="${esc(o.id)}" aria-expanded="${open}">
       <span><span class="nm">${esc(o.id)}${o.name?`<small>${esc(o.name)}</small>`:""}</span><br><span class="meta">${esc(meta)}${why?"":`<span class="rate ${rc}">${rt}</span>`}</span></span>
@@ -1688,7 +1744,7 @@ $("#sqm").onchange=e=>{ S.sqm=e.target.value; save(); render(); };
 $("#minAlt").oninput=e=>{ S.minAlt=+e.target.value; save(); render(); };
 $("#q").oninput=e=>{ Q=e.target.value.trim(); showAll=false; render(); };
 $("#comets").onclick=e=>{ const b=e.target.closest("[data-cid]"); if(b){ openCid = openCid===b.dataset.cid?null:b.dataset.cid; render(); } };
-$("#objs").onclick=e=>{ const b=e.target.closest("[data-id]"); if(b){ openId = openId===b.dataset.id?null:b.dataset.id; render(); } };
+$("#objs").onclick=e=>{ if(e.target.closest("[data-rot]")){ ROT=!ROT; render(); return; } const b=e.target.closest("[data-id]"); if(b){ openId = openId===b.dataset.id?null:b.dataset.id; render(); } };
 $("#dome").onclick=e=>{
   const g=e.target.closest(".obj"); if(!g) return;
   openId=g.dataset.id; showAll=true; render();
