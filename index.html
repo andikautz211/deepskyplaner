@@ -1032,11 +1032,16 @@ function idxNear(times, t, maxH){
 }
 function wxAt(t){
   if(!WX) return null;
-  const i=idxNear(WX.times,t,1); if(i<0) return null;
+  const T0=WX.times, ts=t/1000;
+  let i=-1; for(let k=0;k<T0.length-1;k++){ if(T0[k]<=ts&&ts<T0[k+1]){ i=k; break; } }
+  if(i<0){ const j=idxNear(T0,t,1); if(j<0) return null; i=j; }
+  const f = i<T0.length-1 ? clamp((ts-T0[i])/(T0[i+1]-T0[i])) : 0;   // Anteil zwischen zwei Stundenwerten
+  const lerp=(a,k)=>{ const x=a?a[k]:null, y=a&&k+1<a.length?a[k+1]:null;
+    if(x===null||x===undefined) return null; if(y===null||y===undefined||f===0) return x; return x+(y-x)*f; };
   const res={};
-  for(const [k,m] of Object.entries(WX.models)){
-    const v={}; for(const n of VARS) v[n]=m.d[n]?m.d[n][i]:null;
-    if(v.cloud_cover!==null&&v.cloud_cover!==undefined) res[k]={label:m.label,v};
+  for(const [key,m] of Object.entries(WX.models)){
+    const v={}; for(const n of VARS) v[n]=lerp(m.d[n],i);
+    if(v.cloud_cover!==null&&v.cloud_cover!==undefined) res[key]={label:m.label,v};
   }
   return Object.keys(res).length?res:null;
 }
@@ -1210,14 +1215,23 @@ function listed(E){
   return E.objs.filter(x=>x.visible&&x.inDir&&S.types[GROUP[x.o.t]]).sort((a,b)=>b.score-a.score);
 }
 
+// Ruhiger Vergleichswert: die Bewertung der ganzen dunklen Phase aus dem Ausblick
+function nightLine(E){
+  if(!WX) return "";
+  const o=computeOutlook().find(x=>x.n.start===E.night.start);
+  if(!o||o.noData) return "";
+  return `<p class="small muted" style="margin-top:6px">Die ganze dunkle Phase dieser Nacht kommt auf ${o.score} Punkte. Dieser Wert schwankt weniger als die Bewertung für einen einzelnen Zeitpunkt.</p>`;
+}
 function renderVerdict(E){
   const w=wxAt(T), t7=t7At(T), aq=aqAt(T);
   const list=listed(E);
-  const darkF = E.sa<=-18?1 : E.sa<=-12?0.6 : E.sa<=-6?0.25 : 0;
+  // Dunkelheit stufenlos: 0 bei Sonne über -4°, steigt gleichmäßig bis 1 bei -18° (astronomisch dunkel)
+  const darkF = clamp((-4-E.sa)/14);
   const clouds = w ? Object.values(w).map(m=>m.v.cloud_cover) : [];
   const cAvg = clouds.length ? clouds.reduce((a,b)=>a+b,0)/clouds.length : null;
   const cSpread = clouds.length>1 ? Math.max(...clouds)-Math.min(...clouds) : 0;
-  const moonImpact = E.mo.alt>0 ? E.ph.k*(E.mo.alt>15?1:0.6) : 0;
+  // Mondeinfluss wächst gleichmäßig mit der Mondhöhe (0 knapp unter dem Horizont, voll ab etwa 18°)
+  const moonImpact = E.ph.k*clamp((E.mo.alt+2)/20);
   const clearF = cAvg===null ? 0.7 : Math.pow(1-cAvg/100,1.2);
   let score = Math.round(100*darkF*clearF*(1-0.35*moonImpact));
   const seeN=seeingAt(T), trN=transpAt(T);
@@ -1283,7 +1297,7 @@ function renderVerdict(E){
   $("#verdict").innerHTML = `
     <p class="head">${esc(head)}</p>
     ${darkF>0?`<p class="score" style="color:${col}"><span style="font-size:1.4rem">${score}</span><span class="small">von 100 Punkten</span></p>`:""}
-    <p>${esc(sub)}</p>
+    <p>${esc(sub)}</p>${nightLine(E)}
     <div class="metrics">${m.map(x=>`<div class="metric"><span><i class="dot" style="background:var(--${x[3]})"></i>${x[0]}</span><b>${esc(x[1])}</b><span>${esc(x[2])}</span></div>`).join("")}</div>
     <div class="status">${st.map(esc).join(" ")} <button class="linkbtn" id="reload">Neu laden</button></div>`;
   $("#reload").onclick=loadWeather;
@@ -1816,7 +1830,7 @@ $("#outlook").onclick=e=>{ const b=e.target.closest("[data-jump]"); if(b){ T=+b.
 $("#tl").onclick=e=>{ const b=e.target.closest("[data-t]"); if(b){ T=+b.dataset.t; render(); } };
 
 /* ---------- Start ---------- */
-const APP_VERSION="1.6 vom 28.10.2026";
+const APP_VERSION="1.6.1 vom 28.10.2026";
 (function init(){
   $("#appVer").textContent=APP_VERSION;
   const L=loc(); const now=Date.now();
