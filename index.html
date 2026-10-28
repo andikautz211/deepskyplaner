@@ -145,7 +145,8 @@ thead th{font-weight:700;color:var(--ink)}
 .fov .load{position:absolute;inset:0;display:grid;place-items:center;font-size:.85rem;color:var(--muted);text-align:center;padding:12px}
 .fov figcaption{font-size:.85rem;color:var(--muted);margin-top:6px}
 .fov .row{margin-top:6px}
-html.red .fov img{filter:grayscale(1) sepia(1) saturate(5) hue-rotate(-45deg) brightness(.65)}
+.fov .adj{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:.85rem;color:var(--muted)}
+.fov .adj input{flex:1}
 .empty{padding:18px;border:1px dashed var(--line);border-radius:12px;color:var(--muted)}
 
 /* Quellen */
@@ -959,7 +960,7 @@ const KEY="dsp-v1";
 const S = Object.assign({
   locs:[{name:"Weilerswist",lat:50.7520,lon:6.8460}], cur:0,
   eq:"s150", minAlt:25, dir:"all", sqm:"0.7",
-  types:{gx:true,cl:true,neb:true,ds:true}, red:false
+  types:{gx:true,cl:true,neb:true,ds:true}, red:false, skyAdj:55
 }, (()=>{ try{ return JSON.parse(localStorage.getItem(KEY))||{}; }catch(e){ return {}; } })());
 const save = () => { try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} };
 let T = Date.now();
@@ -1590,6 +1591,14 @@ const SKY_SRC=[
 const SKY_NAME=["CDS Straßburg","CDS Straßburg (Ersatzserver)","NASA SkyView"];
 const skyGood=new Map();   // Objekt-Schlüssel -> Index der Quelle, die zuletzt funktioniert hat
 let skyPref=0;             // nach einem Ausfall gleich mit der funktionierenden Quelle beginnen
+// Abdunkeln und Kontrast der Himmelsfotos, per Regler einstellbar; im Rotlicht-Modus zusätzlich rot eingefärbt.
+function skyFilter(){
+  const t=(S.skyAdj??55)/100;
+  let f=`brightness(${(1-0.6*t).toFixed(2)}) contrast(${(1+1.8*t).toFixed(2)})`;
+  if(S.red) f+=" grayscale(1) sepia(1) saturate(5) hue-rotate(-45deg) brightness(.8)";
+  return f;
+}
+function skyApply(){ const f=skyFilter(); document.querySelectorAll(".fov img.sky").forEach(i=>i.style.filter=f); }
 function skyLoadText(img, txt){ const l=img.parentNode&&img.parentNode.querySelector(".load"); if(l) l.innerHTML=txt; }
 function skyOk(img){
   clearTimeout(img._t);
@@ -1645,9 +1654,10 @@ function fovPreview(o, E){
   }
   svg+=`<text x="10" y="24" fill="#fff" font-size="18" opacity=".85">N ↑  O ←</text>`;
   return `<figure class="fov"><div class="frame"><div class="load">Himmelsfoto wird geladen …</div>
-    <img class="sky" src="${url}" data-key="${esc(key)}" data-i="${si}" data-q='${JSON.stringify(q)}' alt="Himmelsfoto rund um ${esc(o.id)}" decoding="async" onload="skyOk(this)" onerror="skyFail(this)">
+    <img class="sky" style="filter:${skyFilter()}" src="${url}" data-key="${esc(key)}" data-i="${si}" data-q='${JSON.stringify(q)}' alt="Himmelsfoto rund um ${esc(o.id)}" decoding="async" onload="skyOk(this)" onerror="skyFail(this)">
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${svg}</svg></div>
     <figcaption>${esc(cap)} Foto: Digitized Sky Survey über <span class="src">${SKY_NAME[si]}</span>.</figcaption>
+    <label class="adj">Abdunkeln <input type="range" min="0" max="100" step="5" value="${S.skyAdj??55}" data-skyadj="1" aria-label="Himmelsfoto abdunkeln"></label>
     ${smart?`<div class="row"><button class="chip" data-rot="1">Rahmen um 90° drehen</button></div>`:""}</figure>`;
 }
 function whyNot(x){
@@ -1782,7 +1792,8 @@ $("#sqm").onchange=e=>{ S.sqm=e.target.value; save(); render(); };
 $("#minAlt").oninput=e=>{ S.minAlt=+e.target.value; save(); render(); };
 $("#q").oninput=e=>{ Q=e.target.value.trim(); showAll=false; render(); };
 $("#comets").onclick=e=>{ const b=e.target.closest("[data-cid]"); if(b){ openCid = openCid===b.dataset.cid?null:b.dataset.cid; render(); } };
-$("#objs").onclick=e=>{ if(e.target.closest("[data-rot]")){ ROT=!ROT; render(); return; } const b=e.target.closest("[data-id]"); if(b){ openId = openId===b.dataset.id?null:b.dataset.id; render(); } };
+$("#objs").addEventListener("input",e=>{ if(e.target.dataset.skyadj){ S.skyAdj=+e.target.value; skyApply(); save(); } });
+$("#objs").onclick=e=>{ if(e.target.closest("[data-skyadj]")||e.target.closest(".adj")) return; if(e.target.closest("[data-rot]")){ ROT=!ROT; render(); return; } const b=e.target.closest("[data-id]"); if(b){ openId = openId===b.dataset.id?null:b.dataset.id; render(); } };
 $("#dome").onclick=e=>{
   const g=e.target.closest(".obj"); if(!g) return;
   openId=g.dataset.id; showAll=true; render();
@@ -1792,7 +1803,7 @@ $("#outlook").onclick=e=>{ const b=e.target.closest("[data-jump]"); if(b){ T=+b.
 $("#tl").onclick=e=>{ const b=e.target.closest("[data-t]"); if(b){ T=+b.dataset.t; render(); } };
 
 /* ---------- Start ---------- */
-const APP_VERSION="28.10.2026, 2";
+const APP_VERSION="28.10.2026, 3";
 (function init(){
   $("#appVer").textContent=APP_VERSION;
   const L=loc(); const now=Date.now();
