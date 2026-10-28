@@ -1,0 +1,41 @@
+name: Kometendaten aktualisieren
+
+on:
+  schedule:
+    - cron: "23 4 * * *"      # täglich gegen 5/6 Uhr deutscher Zeit
+  workflow_dispatch:           # erlaubt den Start per Knopfdruck
+
+permissions:
+  contents: write
+  pages: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Bahndaten vom Minor Planet Center laden
+        run: python scripts/kometen.py
+
+      - name: comets.json speichern
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add comets.json
+          if git diff --cached --quiet; then
+            echo "Keine Änderungen"
+          else
+            git commit -m "Kometendaten aktualisiert"
+            git push
+          fi
+
+      - name: GitHub Pages neu veröffentlichen
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X POST "repos/${{ github.repository }}/pages/builds"
