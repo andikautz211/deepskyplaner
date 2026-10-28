@@ -264,7 +264,7 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   <div class="links" id="links"></div>
 
   <footer>
-    <p style="margin:0 0 6px">App-Version vom <span id="appVer"></span>.</p>
+    <p style="margin:0 0 6px">App-Version <span id="appVer"></span></p>
     Wetterdaten: Open-Meteo (Modelle DWD ICON, ECMWF IFS, NOAA GFS), Aerosol-Daten: Copernicus CAMS über Open-Meteo, Seeing und Transparenz werden aus Höhenwinden, Windscherung, Luftfeuchte, hohen Wolken und Aerosolen geschätzt; 7Timer dient als Vergleich. Objektkatalog: Auswahl aus <a href="https://github.com/mattiaverga/OpenNGC" style="color:inherit">OpenNGC</a> von Mattia Verga (CC BY-SA 4.0), ergänzt um einige Sharpless-Objekte. Kometen-Bahndaten: Minor Planet Center (IAU). Himmelsfotos: Digitized Sky Survey (DSS2) über den hips2fits-Dienst des CDS Straßburg, ersatzweise NASA SkyView. Positionen von Sonne, Mond und Objekten werden im Gerät berechnet (Genauigkeit etwa ein Grad).
   </footer>
 </main>
@@ -1437,9 +1437,10 @@ function cometObs(c, j){
 function cometsAt(E){
   if(!COMETS||!Array.isArray(COMETS.comets)) return [];
   const j=jd(T), eq=EQ[S.eq]||EQ.s150, smart=eq.kind==="smart";
-  const darkPen = E.sa<=-18?0 : E.sa<=-15?0.7 : E.sa<=-12?1.5 : E.sa<=-9?3 : 6;
-  const moonBase = E.mo.alt>0 ? 2.2*E.ph.k*(E.mo.alt>15?1:0.7) : 0;
-  const pens = darkPen+moonBase+(+S.sqm);
+  // Helle Kometen sind auch in der Dämmerung und bei Mondlicht gut zu sehen: mildere Abzüge als bei Deep-Sky-Objekten
+  const darkPen = E.sa<=-18?0 : E.sa<=-12?0.5 : E.sa<=-9?1.5 : E.sa<=-6?3 : 6;
+  const moonBase = E.mo.alt>0 ? 1.1*E.ph.k*(E.mo.alt>15?1:0.7) : 0;
+  const pens = darkPen+moonBase+0.5*(+S.sqm);
   const out=[];
   for(const c of COMETS.comets){
     let ob; try{ ob=cometObs(c,j); }catch(e){ continue; }
@@ -1503,10 +1504,16 @@ function renderDome(E, CL=[]){
     if(top.has(x.o.id)||sel) s+=`<text class="lbl" x="${(px+r+3).toFixed(1)}" y="${(py+4).toFixed(1)}">${esc(x.o.id.replace("NGC ","N"))}</text>`;
     s+=`</g>`;
   }
-  const sun=sunPos(T), sp=altAz(sun.ra,sun.dec,T,E.lat,E.lon), [sx,sy]=pt(sp.alt,sp.az);
+  const sun=sunPos(T), sp=altAz(sun.ra,sun.dec,T,E.lat,E.lon);
   for(const x of CL){
     if(x.alt<=0||x.margin<0) continue;
-    const [cx2,cy2]=pt(x.alt,x.az); let dx=cx2-sx, dy=cy2-sy; const l=Math.hypot(dx,dy)||1; dx/=l; dy/=l;
+    // Schweif zeigt am Himmel von der Sonne weg: Richtung entlang des Großkreises Sonne -> Komet
+    const v=(al,az)=>[Math.cos(al*D)*Math.sin(az*D),Math.cos(al*D)*Math.cos(az*D),Math.sin(al*D)];
+    const cv=v(x.alt,x.az), sv=v(sp.alt,sp.az), dot=cv[0]*sv[0]+cv[1]*sv[1]+cv[2]*sv[2];
+    const tv=[cv[0]*dot-sv[0],cv[1]*dot-sv[1],cv[2]*dot-sv[2]], tl=Math.hypot(...tv)||1;
+    const qv=cv.map((c,k)=>c+0.06*tv[k]/tl), ql=Math.hypot(...qv);
+    const qa=Math.asin(qv[2]/ql)/D, qz=norm(Math.atan2(qv[0],qv[1])/D);
+    const [cx2,cy2]=pt(x.alt,x.az), [qx,qy]=pt(qa,qz); let dx=qx-cx2, dy=qy-cy2; const l=Math.hypot(dx,dy)||1; dx/=l; dy/=l;
     const op=x.alt<S.minAlt?.35:1;
     s+=`<g opacity="${op}"><line x1="${cx2.toFixed(1)}" y1="${cy2.toFixed(1)}" x2="${(cx2+dx*16).toFixed(1)}" y2="${(cy2+dy*16).toFixed(1)}" stroke="var(--good)" stroke-width="2.5" stroke-linecap="round" opacity=".6"/><circle cx="${cx2.toFixed(1)}" cy="${cy2.toFixed(1)}" r="4" fill="var(--good)"/><text class="lbl" x="${(cx2>230?cx2-7:cx2+7).toFixed(1)}" y="${(cy2-9).toFixed(1)}" text-anchor="${cx2>230?"end":"start"}">${esc(cometName(x.c)[0])}</text></g>`;
   }
@@ -1807,7 +1814,7 @@ $("#outlook").onclick=e=>{ const b=e.target.closest("[data-jump]"); if(b){ T=+b.
 $("#tl").onclick=e=>{ const b=e.target.closest("[data-t]"); if(b){ T=+b.dataset.t; render(); } };
 
 /* ---------- Start ---------- */
-const APP_VERSION="28.10.2026, 4";
+const APP_VERSION="1.6 vom 28.10.2026";
 (function init(){
   $("#appVer").textContent=APP_VERSION;
   const L=loc(); const now=Date.now();
