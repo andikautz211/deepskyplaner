@@ -35,7 +35,7 @@ body{margin:0;background:var(--sky);color:var(--ink);
   -webkit-text-size-adjust:100%}
 main{max-width:760px;margin:0 auto;padding:12px 16px 56px}
 h1,h2,.head{font-family:"Bricolage Grotesque","Atkinson Hyperlegible",system-ui,sans-serif;letter-spacing:-.01em}
-h1{font-size:1.35rem;margin:0}
+h1{font-size:1.35rem;margin:0;white-space:nowrap}
 h2{font-size:1.15rem;margin:36px 0 10px}
 button,input,select{font:inherit;color:inherit}
 button{cursor:pointer}
@@ -173,7 +173,10 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
 <main>
   <header class="top">
     <h1>Deep-Sky-Planer</h1>
-    <button class="redbtn" id="redBtn" aria-pressed="false">Rotlicht</button>
+    <div class="row" style="gap:6px;flex-wrap:nowrap">
+      <button class="redbtn" id="refreshBtn" aria-label="App und Daten aktualisieren" title="Aktualisieren" style="font-size:1.15rem;padding:4px 12px;line-height:1">↻</button>
+      <button class="redbtn" id="redBtn" aria-pressed="false">Rotlicht</button>
+    </div>
   </header>
 
   <section class="controls" aria-label="Abfrage">
@@ -260,7 +263,8 @@ dialog::backdrop{background:rgba(0,0,0,.6)}
   <div class="links" id="links"></div>
 
   <footer>
-    Wetterdaten: Open-Meteo (Modelle DWD ICON, ECMWF IFS, NOAA GFS), Aerosol-Daten: Copernicus CAMS über Open-Meteo, Seeing und Transparenz werden aus Höhenwinden, Windscherung, Luftfeuchte, hohen Wolken und Aerosolen geschätzt; 7Timer dient als Vergleich. Objektkatalog: Auswahl aus <a href="https://github.com/mattiaverga/OpenNGC" style="color:inherit">OpenNGC</a> von Mattia Verga (CC BY-SA 4.0), ergänzt um einige Sharpless-Objekte. Kometen-Bahndaten: Minor Planet Center (IAU). Himmelsfotos: Digitized Sky Survey (DSS2) über den hips2fits-Dienst des CDS Straßburg. Positionen von Sonne, Mond und Objekten werden im Gerät berechnet (Genauigkeit etwa ein Grad).
+    <p style="margin:0 0 6px">App-Version vom <span id="appVer"></span>.</p>
+    Wetterdaten: Open-Meteo (Modelle DWD ICON, ECMWF IFS, NOAA GFS), Aerosol-Daten: Copernicus CAMS über Open-Meteo, Seeing und Transparenz werden aus Höhenwinden, Windscherung, Luftfeuchte, hohen Wolken und Aerosolen geschätzt; 7Timer dient als Vergleich. Objektkatalog: Auswahl aus <a href="https://github.com/mattiaverga/OpenNGC" style="color:inherit">OpenNGC</a> von Mattia Verga (CC BY-SA 4.0), ergänzt um einige Sharpless-Objekte. Kometen-Bahndaten: Minor Planet Center (IAU). Himmelsfotos: Digitized Sky Survey (DSS2) über den hips2fits-Dienst des CDS Straßburg, ersatzweise NASA SkyView. Positionen von Sonne, Mond und Objekten werden im Gerät berechnet (Genauigkeit etwa ein Grad).
   </footer>
 </main>
 
@@ -1576,16 +1580,36 @@ function mosaicOf(o, eq, rot){
   const A=cnt(a,b), B=cnt(b,a);
   return A.nx*A.ny<=B.nx*B.ny ? A : B;
 }
-// Das CDS betreibt zwei gleichwertige Server; fällt der erste aus, wird der zweite versucht.
-const SKY_HOSTS=["https://alasky.cds.unistra.fr","https://alaskybis.cds.unistra.fr"];
-const skyCache=new Map();
-function skyOk(img){ const l=img.parentNode&&img.parentNode.querySelector(".load"); if(l) l.remove(); skyCache.set(img.dataset.key,img.src); }
+// Bildquellen der Reihe nach: CDS Straßburg (zwei Server, Farbe), dann NASA SkyView (Graustufen).
+// Lädt eine Quelle nicht oder nicht innerhalb von 12 Sekunden, kommt die nächste dran.
+const SKY_SRC=[
+  q=>`https://alasky.cds.unistra.fr/hips-image-services/hips2fits?hips=${encodeURIComponent("CDS/P/DSS2/color")}&width=${q.W}&height=${q.H}&fov=${q.fw.toFixed(4)}&projection=TAN&coordsys=icrs&ra=${q.ra.toFixed(4)}&dec=${q.dec.toFixed(4)}&format=jpg`,
+  q=>`https://alaskybis.cds.unistra.fr/hips-image-services/hips2fits?hips=${encodeURIComponent("CDS/P/DSS2/color")}&width=${q.W}&height=${q.H}&fov=${q.fw.toFixed(4)}&projection=TAN&coordsys=icrs&ra=${q.ra.toFixed(4)}&dec=${q.dec.toFixed(4)}&format=jpg`,
+  q=>`https://skyview.gsfc.nasa.gov/cgi-bin/images?Survey=DSS2+Red&position=${q.ra.toFixed(4)},${q.dec.toFixed(4)}&Size=${q.fw.toFixed(4)},${(q.fw*q.H/q.W).toFixed(4)}&Pixels=${q.W},${q.H}&Return=JPEG`
+];
+const SKY_NAME=["CDS Straßburg","CDS Straßburg (Ersatzserver)","NASA SkyView"];
+const skyGood=new Map();   // Objekt-Schlüssel -> Index der Quelle, die zuletzt funktioniert hat
+let skyPref=0;             // nach einem Ausfall gleich mit der funktionierenden Quelle beginnen
+function skyLoadText(img, txt){ const l=img.parentNode&&img.parentNode.querySelector(".load"); if(l) l.innerHTML=txt; }
+function skyOk(img){
+  clearTimeout(img._t);
+  const l=img.parentNode&&img.parentNode.querySelector(".load"); if(l) l.remove();
+  const i=+img.dataset.i; skyGood.set(img.dataset.key,i); skyPref=i;
+  const c=img.closest(".fov").querySelector(".src"); if(c) c.textContent=SKY_NAME[i];
+}
 function skyFail(img){
-  const l=img.parentNode&&img.parentNode.querySelector(".load");
-  if(img.src.startsWith(SKY_HOSTS[0])){ img.src=img.src.replace(SKY_HOSTS[0],SKY_HOSTS[1]); if(l) l.textContent="Erster Server antwortet nicht, versuche den zweiten …"; return; }
-  if(l) l.innerHTML="Das Himmelsfoto konnte nicht geladen werden.<br>Die Server des CDS Straßburg sind gerade nicht erreichbar.";
+  clearTimeout(img._t);
+  if(!img.isConnected) return;
+  const q=JSON.parse(img.dataset.q); const next=+img.dataset.i+1;
+  if(next<SKY_SRC.length){
+    img.dataset.i=next; skyLoadText(img,`Server antwortet nicht, versuche ${SKY_NAME[next]} …`);
+    img.src=SKY_SRC[next](q); skyArm(img); return;
+  }
+  skyLoadText(img,"Das Himmelsfoto konnte nicht geladen werden.<br>Keiner der Bildserver ist von deinem Gerät aus erreichbar.");
   img.remove();
 }
+function skyArm(img){ clearTimeout(img._t); img._t=setTimeout(()=>{ if(!(img.complete&&img.naturalWidth)) skyFail(img); },12000); }
+function skyArmAll(){ document.querySelectorAll(".fov img.sky").forEach(img=>{ if(!(img.complete&&img.naturalWidth)) skyArm(img); }); }
 function fovPreview(o, E){
   const eq=E.eq, smart=E.smart, W=600, H=400;
   const objDeg=(o.maj||10)/60;
@@ -1598,7 +1622,8 @@ function fovPreview(o, E){
     mz.fw=fw; mz.fh=fh; mz.mw=mw; mz.mh=mh;
   } else imgW=Math.max(objDeg*2.2, 0.5);
   imgW=Math.min(imgW, 20);
-  const url=`${SKY_HOSTS[0]}/hips-image-services/hips2fits?hips=${encodeURIComponent("CDS/P/DSS2/color")}&width=${W}&height=${H}&fov=${imgW.toFixed(4)}&projection=TAN&coordsys=icrs&ra=${o.ra.toFixed(4)}&dec=${o.dec.toFixed(4)}&format=jpg`;
+  const q={W,H,fw:imgW,ra:o.ra,dec:o.dec}, key=`${o.id}|${imgW.toFixed(3)}`;
+  const si=skyGood.has(key)?skyGood.get(key):skyPref, url=SKY_SRC[si](q);
   let svg="", cap;
   const k=W/imgW;
   if(smart){
@@ -1620,9 +1645,9 @@ function fovPreview(o, E){
   }
   svg+=`<text x="10" y="24" fill="#fff" font-size="18" opacity=".85">N ↑  O ←</text>`;
   return `<figure class="fov"><div class="frame"><div class="load">Himmelsfoto wird geladen …</div>
-    <img class="sky" src="${skyCache.get(url)||url}" data-key="${url}" alt="Himmelsfoto rund um ${esc(o.id)}" decoding="async" onload="skyOk(this)" onerror="skyFail(this)">
+    <img class="sky" src="${url}" data-key="${esc(key)}" data-i="${si}" data-q='${JSON.stringify(q)}' alt="Himmelsfoto rund um ${esc(o.id)}" decoding="async" onload="skyOk(this)" onerror="skyFail(this)">
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${svg}</svg></div>
-    <figcaption>${esc(cap)} Foto: Digitized Sky Survey über CDS Straßburg.</figcaption>
+    <figcaption>${esc(cap)} Foto: Digitized Sky Survey über <span class="src">${SKY_NAME[si]}</span>.</figcaption>
     ${smart?`<div class="row"><button class="chip" data-rot="1">Rahmen um 90° drehen</button></div>`:""}</figure>`;
 }
 function whyNot(x){
@@ -1673,6 +1698,7 @@ function renderObjs(E){
       <span><span class="nm">${esc(o.id)}${o.name?`<small>${esc(o.name)}</small>`:""}</span><br><span class="meta">${esc(meta)}${why?"":`<span class="rate ${rc}">${rt}</span>`}</span></span>
       <span class="pos">${nf(x.alt)}°<small>${why?esc(why):`im ${azName(x.az)}`}</small></span></button>${detail}</li>`;
   }).join("");
+  skyArmAll();
   $("#objMore").innerHTML = list.length>20 ? `<button class="chip" id="moreBtn">${showAll?"Weniger anzeigen":`Alle ${list.length} anzeigen`}</button>` : "";
   const mb=$("#moreBtn"); if(mb) mb.onclick=()=>{showAll=!showAll; render();};
 }
@@ -1744,6 +1770,8 @@ $("#mSave").onclick=()=>{
 };
 
 /* ---------- Ereignisse ---------- */
+// Lädt die Seite frisch vom Server (neueste App-Version) und alle Daten neu; Einstellungen bleiben erhalten.
+$("#refreshBtn").onclick=()=>{ const u=new URL(location.href); u.searchParams.set("v",Date.now()); location.replace(u.toString()); };
 $("#redBtn").onclick=()=>{ S.red=!S.red; save(); render(); };
 $("#when").onchange=e=>{ if(e.target.value){ T=fromInput(e.target.value); render(); } };
 document.querySelectorAll("[data-when]").forEach(b=>b.onclick=()=>setTime(b.dataset.when));
@@ -1764,7 +1792,9 @@ $("#outlook").onclick=e=>{ const b=e.target.closest("[data-jump]"); if(b){ T=+b.
 $("#tl").onclick=e=>{ const b=e.target.closest("[data-t]"); if(b){ T=+b.dataset.t; render(); } };
 
 /* ---------- Start ---------- */
+const APP_VERSION="28.10.2026, 2";
 (function init(){
+  $("#appVer").textContent=APP_VERSION;
   const L=loc(); const now=Date.now();
   if(sunAlt(now,L.lat,L.lon)>-12){ const n=nightFor(now,L.lat,L.lon); T=(n.dusk||n.nDusk||n.minT); if(T<now) T=now; }
   T=Math.round(T/300000)*300000;
