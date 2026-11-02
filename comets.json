@@ -1,18 +1,18 @@
 {
- "updated": "2026-11-01T05:11:15Z",
+ "updated": "2026-11-02T05:24:21Z",
  "source": "Minor Planet Center, CometEls.txt",
  "comets": [
   {
    "name": "161P/Hartley-IRAS",
    "T": 2461371.6785,
    "q": 1.265108,
-   "e": 0.836176,
+   "e": 0.836175,
    "w": 47.0654,
    "node": 1.4736,
    "i": 95.792,
    "H": 8.5,
    "G": 6.0,
-   "maxMag60": 10.1
+   "maxMag60": 10.2
   }
  ]
 }
