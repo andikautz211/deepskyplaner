@@ -1,5 +1,5 @@
 {
- "updated": "2026-11-09T05:28:44Z",
+ "updated": "2026-11-10T05:17:59Z",
  "source": "Minor Planet Center, CometEls.txt",
  "comets": [
   {
@@ -12,7 +12,7 @@
    "i": 95.792,
    "H": 8.5,
    "G": 6.0,
-   "maxMag60": 10.3
+   "maxMag60": 10.4
   },
   {
    "name": "P/2020 G1 (Pimentel)",
@@ -24,7 +24,7 @@
    "i": 18.5038,
    "H": 17.0,
    "G": 4.0,
-   "maxMag60": 13.3
+   "maxMag60": 13.2
   },
   {
    "name": "2P/Encke",
@@ -36,7 +36,7 @@
    "i": 11.3479,
    "H": 14.6,
    "G": 4.0,
-   "maxMag60": 13.5
+   "maxMag60": 13.4
   }
  ]
 }
